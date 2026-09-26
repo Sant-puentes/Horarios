@@ -26,12 +26,28 @@ button.clr{background:none;border:1px solid var(--line);color:var(--mut);border-
 #grid{display:grid;grid-template-columns:52px repeat(7,minmax(var(--cw,312px),1fr));min-width:max-content;width:100%}
 .dh{position:sticky;top:0;z-index:4;background:var(--panel);border-bottom:1px solid var(--line);border-left:2px solid var(--dv);padding:9px 8px;font-weight:700;text-align:center;grid-row:1}
 .corner{position:sticky;top:0;left:0;z-index:6;background:var(--panel);border-bottom:1px solid var(--line);grid-area:1/1}
-.gut{position:sticky;left:0;z-index:5;background:var(--panel);height:calc(var(--n)*40px);grid-area:2/1}
+.gut{position:sticky;left:0;z-index:5;background:var(--panel);height:calc(var(--n)*40px);grid-area:3/1}
+.rest{grid-row:2;border-left:2px solid var(--dv);background:var(--panel);min-height:30px;display:flex;flex-wrap:wrap;align-content:center;gap:4px;padding:4px 6px;border-bottom:1px solid var(--line)}
+.rest:empty::after{content:"Descanso";color:var(--mut);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;opacity:.65}
+.rest.hover{background:var(--alt);outline:2px dashed var(--dv);outline-offset:-2px}
+.rchip{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;color:#fff;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
+.rchip i{font-style:normal}
+.grp{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.grp button{background:none;border:0;color:var(--mut);padding:6px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+.grp button.on{background:var(--ink);color:var(--panel);font-weight:700}
+.grp button+button{border-left:1px solid var(--line)}
+dialog{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:16px;max-width:340px;width:calc(100% - 32px)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+.emprow{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px}
+.emprow .dot{width:14px;height:14px;border-radius:50%;flex:0 0 auto}
+.emprow span{flex:1;font-weight:600}
+#empName{flex:1 1 140px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit}
+#empColor{width:44px;height:36px;border:1px solid var(--line);border-radius:8px;padding:0;background:none}
 .gut div{height:40px;font-size:11px;color:var(--mut);text-align:right;padding:2px 6px 0 0;box-sizing:border-box}
-.body{grid-row:2;position:relative;height:calc(var(--n)*40px);border-left:2px solid var(--dv);
+.body{grid-row:3;position:relative;height:calc(var(--n)*40px);border-left:2px solid var(--dv);
 background-image:linear-gradient(to right,var(--line2) 1px,transparent 1px),linear-gradient(to bottom,var(--line) 1px,transparent 1px);
 background-size:calc(100%/6) 100%,100% 40px}
-#ov{grid-area:2/2/3/9;position:relative;z-index:2;pointer-events:none;height:calc(var(--n)*40px)}
+#ov{grid-area:3/2/4/9;position:relative;z-index:2;pointer-events:none;height:calc(var(--n)*40px)}
 .blk{position:absolute;box-sizing:border-box;padding:1px;touch-action:none;cursor:grab;pointer-events:auto;-webkit-touch-callout:none}
 .blk .in{position:relative;height:100%;border-radius:7px;color:#fff;padding:9px 3px 3px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.25);font-size:10.5px;line-height:1.2}
 .blk b{display:block;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.02em}
@@ -46,40 +62,106 @@ background-size:calc(100%/6) 100%,100% 40px}
 .compact .blk b,.compact .blk span,.compact .x{display:none}
 .compact .blk .in{padding:9px 0 0;border-radius:4px}
 .compact .blk .in::before{content:attr(data-i);display:block;text-align:center;font-weight:700;font-size:10px}
+.compact .rest:empty::after{display:none}
+.compact .rest{padding:4px 3px}
+.compact .rchip{padding:0;width:20px;height:20px;border-radius:50%;justify-content:center}
+.compact .rchip i{display:none}
+.compact .rchip::before{content:attr(data-i);font-weight:700;font-size:10.5px}
 </style>
 </head>
 <body>
 <header>
   <div class="top"><h1>Horarios del personal</h1><div class="acts"><button class="clr" id="zo" aria-label="Alejar">−</button><button class="clr" id="zi" aria-label="Acercar">+</button><button class="clr" id="zf">Ver semana</button><button class="clr" id="clr">Vaciar</button></div></div>
-  <p class="hint">Arrastra un empleado a un día. Estira los bordes del bloque para cambiar sus horas. Para un turno partido, suelta al mismo empleado otra vez en ese día.</p>
+  <div class="top" style="margin-top:6px">
+    <div class="grp" id="grp"><button data-g="cocina" class="on">Cocina</button><button data-g="barra">Barra y servicio</button></div>
+    <button class="clr" id="empBtn">Empleados</button>
+  </div>
+  <p class="hint">Arrastra un empleado a un día. Estira los bordes del bloque para cambiar sus horas. Para un turno partido, suelta al mismo empleado otra vez en ese día. Suelta sobre "Descanso" (arriba de cada día) para marcar que ese empleado libra ese día.</p>
   <div id="pal"></div>
   <div id="msg"></div>
 </header>
 <div id="sc"><div id="grid"></div></div>
+<dialog id="empd">
+  <h2 id="empdTitle" style="margin:0 0 10px;font-size:15px">Empleados</h2>
+  <div id="empList"></div>
+  <form id="empForm" style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
+    <input id="empName" placeholder="Nombre" required>
+    <input id="empColor" type="color" value="#4a6fa5">
+    <button class="clr" type="submit">Agregar</button>
+  </form>
+  <div style="text-align:right;margin-top:14px"><button class="clr" id="empClose" type="button">Cerrar</button></div>
+</dialog>
 <script>
-const EMP=[{n:'Jefferson',c:'#e2622a'},{n:'Jean',c:'#2f7de1'},{n:'María',c:'#d6337f'},{n:'Alberto',c:'#12905f'},{n:'Alonso',c:'#7c4ddb'},{n:'Edgar',c:'#b7791f'}];
+const DEFAULT_COCINA=[
+  {id:'jefferson',n:'Jefferson',c:'#e2622a'},
+  {id:'jean',n:'Jean',c:'#2f7de1'},
+  {id:'maria',n:'María',c:'#d6337f'},
+  {id:'alberto',n:'Alberto',c:'#12905f'},
+  {id:'alonso',n:'Alonso',c:'#7c4ddb'},
+  {id:'edgar',n:'Edgar',c:'#b7791f'}
+];
+const DEFAULT_BARRA=[
+  {id:'sabina',n:'Sabina',c:'#c2185b'},
+  {id:'mariap',n:'Maria P',c:'#0277bd'},
+  {id:'camila',n:'Camila',c:'#8a6008'},
+  {id:'juan',n:'Juan',c:'#2e7d32'},
+  {id:'angel',n:'Angel',c:'#6a1b9a'},
+  {id:'juanpablo',n:'Juan Pablo',c:'#37474f'},
+  {id:'ivan',n:'Ivan',c:'#d84315'},
+  {id:'david',n:'David',c:'#00838f'}
+];
 const DAYS=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 const S=7,E=24,HH=40,L=6,SNAP=.5,DUR=4,N=E-S;
 const API='/api/shifts';
-let shifts=[];try{shifts=JSON.parse(localStorage.getItem('horarios-v1')||'[]')}catch(e){}
+
+const clone=o=>JSON.parse(JSON.stringify(o));
+function hasContent(d){return !!(d&&d.cocina&&d.barra&&(d.cocina.shifts.length||d.cocina.rests.length||d.barra.shifts.length||d.barra.rests.length))}
+function migrate(raw){
+  if(!raw)return null;
+  if(Array.isArray(raw)){
+    const order=['jefferson','jean','maria','alberto','alonso','edgar'];
+    return{
+      cocina:{emp:clone(DEFAULT_COCINA),shifts:raw.map(s=>({...s,emp:order[s.emp]??s.emp})),rests:[]},
+      barra:{emp:clone(DEFAULT_BARRA),shifts:[],rests:[]}
+    };
+  }
+  if(raw.cocina&&raw.barra&&Array.isArray(raw.cocina.shifts)&&Array.isArray(raw.barra.shifts))return raw;
+  return null;
+}
+
+let DATA=null;
+try{DATA=migrate(JSON.parse(localStorage.getItem('horarios-v2')||'null'))}catch(e){}
+if(!DATA){
+  let legacy=null;try{legacy=JSON.parse(localStorage.getItem('horarios-v1')||'null')}catch(e){}
+  DATA=migrate(legacy);
+}
+if(!DATA)DATA={cocina:{emp:clone(DEFAULT_COCINA),shifts:[],rests:[]},barra:{emp:clone(DEFAULT_BARRA),shifts:[],rests:[]}};
+
+let group='cocina';
+let EMP=DATA.cocina.emp,shifts=DATA.cocina.shifts,rests=DATA.cocina.rests;
+
 const save=()=>{
-  try{localStorage.setItem('horarios-v1',JSON.stringify(shifts))}catch(e){}
-  fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(shifts)})
+  try{localStorage.setItem('horarios-v2',JSON.stringify(DATA))}catch(e){}
+  fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(DATA)})
     .then(r=>{if(!r.ok)throw 0})
     .catch(()=>toast('Guardado en este dispositivo; no se pudo sincronizar con la nube.'));
 };
 async function pull(){
   try{
     const r=await fetch(API);if(!r.ok)return;
-    const remote=await r.json();
-    if(Array.isArray(remote)&&remote.length){
-      shifts=remote;try{localStorage.setItem('horarios-v1',JSON.stringify(shifts))}catch(e){}render();
-    }else if(shifts.length){
+    const raw=await r.json();
+    const remote=migrate(raw);
+    if(remote&&hasContent(remote)){
+      DATA=remote;
+      try{localStorage.setItem('horarios-v2',JSON.stringify(DATA))}catch(e){}
+      setGroup(group);
+    }else if(hasContent(DATA)){
       save();
     }
   }catch(e){}
 }
-const $=s=>document.querySelector(s),sc=$('#sc'),grid=$('#grid'),pal=$('#pal'),msg=$('#msg');
+
+const $=s=>document.querySelector(s),sc=$('#sc'),grid=$('#grid'),pal=$('#pal'),msg=$('#msg'),empd=$('#empd');
 const snap=h=>Math.round(h/SNAP)*SNAP,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const fmt=h=>{const m=Math.round(h*60),H=Math.floor(m/60),M=m%60,x=H%24;return (x%12||12)+(M?':'+String(M).padStart(2,'0'):'')+(x<12?'am':'pm')};
 const dur=h=>Number.isInteger(h)?''+h:h.toFixed(1);
@@ -88,17 +170,28 @@ let tm;function toast(t){msg.textContent=t;clearTimeout(tm);tm=setTimeout(()=>ms
 
 grid.style.setProperty('--n',N);
 grid.innerHTML='<div class="corner"></div>'+DAYS.map((d,i)=>`<div class="dh" style="grid-column:${i+2}"><span class="f">${d}</span><span class="s">${d.slice(0,3)}</span></div>`).join('')+
+ DAYS.map((_,i)=>`<div class="rest" data-day="${i}" style="grid-column:${i+2}"></div>`).join('')+
  '<div class="gut">'+Array.from({length:N},(_,i)=>`<div>${lab(S+i)}</div>`).join('')+'</div>'+
  DAYS.map((_,i)=>`<div class="body${i%2?' alt':''}" style="grid-column:${i+2}"></div>`).join('')+'<div id="ov"></div>';
 const ov=$('#ov');
-pal.innerHTML=EMP.map((e,i)=>`<div class="chip" data-i="${i}" style="background:${e.c}">${e.n}<small id="t${i}">0 h</small></div>`).join('');
 document.addEventListener('contextmenu',e=>e.preventDefault());
+
+function buildPalette(){
+  pal.innerHTML=EMP.map(e=>`<div class="chip" data-id="${e.id}" style="background:${e.c}">${e.n}<small id="t-${e.id}">0 h</small></div>`).join('');
+}
 
 function locate(x,y){
   const s=sc.getBoundingClientRect(),r=ov.getBoundingClientRect();
   if(y<s.top||y>s.bottom||x<r.left||x>=r.right||x<s.left)return null;
   const k=clamp(Math.floor((x-r.left)/r.width*7*L),0,7*L-1);
   return{day:Math.floor(k/L),lane:k%L,h:S+(y-r.top)/HH};
+}
+function restDay(x,y){
+  for(const c of document.querySelectorAll('.rest')){
+    const r=c.getBoundingClientRect();
+    if(x>=r.left&&x<r.right&&y>=r.top&&y<=r.bottom)return +c.dataset.day;
+  }
+  return null;
 }
 function fit(s,day,lane,a,b){
   if(shifts.some(o=>o.id!==s.id&&o.emp===s.emp&&o.day===day&&a<o.end&&b>o.start))return -2;
@@ -113,17 +206,52 @@ function render(){
   const ids=new Set(shifts.map(s=>s.id));
   nodes.forEach((n,id)=>{if(!ids.has(id)){n.remove();nodes.delete(id)}});
   shifts.forEach(s=>{
+    const e=EMP.find(x=>x.id===s.emp);if(!e)return;
     let n=nodes.get(s.id);
     if(!n){
       n=document.createElement('div');n.className='blk';n.sid=s.id;
-      n.innerHTML=`<div class="in" data-i="${EMP[s.emp].n[0]}" style="background:${EMP[s.emp].c}"><div class="rz t" data-m="t"></div><b>${EMP[s.emp].n}</b><span></span><button class="x" aria-label="Quitar turno">×</button><div class="rz b" data-m="b"></div></div>`;
+      n.innerHTML=`<div class="in" data-i="${e.n[0]}" style="background:${e.c}"><div class="rz t" data-m="t"></div><b>${e.n}</b><span></span><button class="x" aria-label="Quitar turno">×</button><div class="rz b" data-m="b"></div></div>`;
       ov.appendChild(n);nodes.set(s.id,n);
     }
     n.style.cssText=`left:${(s.day*L+s.lane)*100/(7*L)}%;width:${100/(7*L)}%;top:${(s.start-S)*HH}px;height:${(s.end-s.start)*HH}px`;
     n.querySelector('span').innerHTML=fmt(s.start)+'<br>'+fmt(s.end);
   });
-  EMP.forEach((_,i)=>{const h=shifts.filter(s=>s.emp===i).reduce((a,s)=>a+s.end-s.start,0);$('#t'+i).textContent=dur(h)+' h'});
+  EMP.forEach(e=>{
+    const h=shifts.filter(s=>s.emp===e.id).reduce((a,s)=>a+s.end-s.start,0);
+    const el=$('#t-'+e.id);if(el)el.textContent=dur(h)+' h';
+  });
 }
+function renderRests(){
+  document.querySelectorAll('.rest').forEach(c=>{
+    const day=+c.dataset.day;
+    c.innerHTML=rests.filter(r=>r.day===day).map(r=>{
+      const e=EMP.find(x=>x.id===r.emp);if(!e)return '';
+      return `<span class="rchip" data-emp="${e.id}" data-day="${day}" style="background:${e.c}" data-i="${e.n[0]}"><i>${e.n}</i></span>`;
+    }).join('');
+  });
+}
+function addRest(empId,day,name){
+  if(rests.some(r=>r.emp===empId&&r.day===day))return toast(`${name} ya está marcado descansando ese día.`);
+  rests.push({emp:empId,day});save();renderRests();
+}
+grid.addEventListener('click',ev=>{
+  const rc=ev.target.closest('.rchip');if(!rc)return;
+  const emp=rc.dataset.emp,day=+rc.dataset.day;
+  const idx=rests.findIndex(r=>r.emp===emp&&r.day===day);
+  if(idx>-1){rests.splice(idx,1);save();renderRests()}
+});
+
+function setGroup(g){
+  group=g;
+  EMP=DATA[g].emp;shifts=DATA[g].shifts;rests=DATA[g].rests;
+  nodes.forEach(n=>n.remove());nodes.clear();
+  buildPalette();render();renderRests();
+  document.querySelectorAll('#grp button').forEach(b=>b.classList.toggle('on',b.dataset.g===g));
+}
+$('#grp').addEventListener('click',ev=>{
+  const b=ev.target.closest('button');if(!b||b.dataset.g===group)return;
+  setGroup(b.dataset.g);
+});
 
 /* seguimiento del puntero (evita que el dedo desplace la página) */
 const stop=e=>{if(e.cancelable)e.preventDefault()};
@@ -133,19 +261,28 @@ function track(mv,end){
   addEventListener('touchmove',stop,{passive:false});
 }
 
-/* empleados de arriba -> semana */
+/* empleados de arriba -> semana o descanso */
 pal.addEventListener('pointerdown',ev=>{
   const chip=ev.target.closest('.chip');if(!chip)return;ev.preventDefault();
-  const i=+chip.dataset.i,e=EMP[i],g=document.createElement('div');
+  const id=chip.dataset.id,e=EMP.find(x=>x.id===id);if(!e)return;
+  const g=document.createElement('div');
   g.className='ghost';g.textContent=e.n;g.style.background=e.c;document.body.appendChild(g);
   try{chip.setPointerCapture(ev.pointerId)}catch(_){}
-  const pos=m=>{g.style.left=m.clientX+'px';g.style.top=(m.clientY-34)+'px'};pos(ev);
+  let overRest=null;
+  const pos=m=>{
+    g.style.left=m.clientX+'px';g.style.top=(m.clientY-34)+'px';
+    overRest=restDay(m.clientX,m.clientY);
+    document.querySelectorAll('.rest').forEach(c=>c.classList.toggle('hover',overRest!==null&&+c.dataset.day===overRest));
+  };
+  pos(ev);
   track(pos,m=>{
-    g.remove();if(m.type==='pointercancel')return;
+    g.remove();document.querySelectorAll('.rest').forEach(c=>c.classList.remove('hover'));
+    if(m.type==='pointercancel')return;
+    if(overRest!==null)return addRest(id,overRest,e.n);
     const loc=locate(m.clientX,m.clientY);if(!loc)return;
-    const a=snap(clamp(loc.h,S,E-DUR)),nx=Math.min(a+DUR,...shifts.filter(o=>o.emp===i&&o.day===loc.day&&o.start>=a).map(o=>o.start));
+    const a=snap(clamp(loc.h,S,E-DUR)),nx=Math.min(a+DUR,...shifts.filter(o=>o.emp===id&&o.day===loc.day&&o.start>=a).map(o=>o.start));
     if(nx-a<SNAP)return toast(`${e.n} ya tiene turno a esa hora. Elige otro hueco.`);
-    const s={id:Date.now()+Math.random(),emp:i,day:loc.day,lane:0,start:a,end:nx};
+    const s={id:Date.now()+Math.random(),emp:id,day:loc.day,lane:0,start:a,end:nx};
     const l=fit(s,loc.day,loc.lane,s.start,s.end);
     if(l===-2)return toast(`${e.n} ya tiene turno a esa hora ese día.`);
     if(l<0)return toast('No hay espacio libre a esa hora en ese día.');
@@ -175,9 +312,54 @@ ov.addEventListener('pointerdown',ev=>{
 });
 ov.addEventListener('click',ev=>{
   const x=ev.target.closest('.x');if(!x)return;
-  const id=x.closest('.blk').sid;shifts=shifts.filter(o=>o.id!==id);save();render();
+  const id=x.closest('.blk').sid;
+  const idx=shifts.findIndex(o=>o.id===id);if(idx>-1)shifts.splice(idx,1);
+  save();render();
 });
-$('#clr').onclick=()=>{if(shifts.length&&confirm('¿Vaciar todos los turnos de la semana?')){shifts=[];save();render()}};
+$('#clr').onclick=()=>{if(shifts.length&&confirm('¿Vaciar todos los turnos de la semana (solo de este grupo)?')){shifts.length=0;save();render()}};
+
+/* administrar empleados del grupo activo */
+function slug(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'')||'e'}
+function uniqueId(base){let id=base,n=2;while(EMP.some(e=>e.id===id)){id=base+n;n++}return id}
+function hslHex(h,s=55,l=38){
+  s/=100;l/=100;
+  const k=n=>(n+h/30)%12;
+  const a=s*Math.min(l,1-l);
+  const f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
+  const toHex=x=>Math.round(255*x).toString(16).padStart(2,'0');
+  return '#'+toHex(f(0))+toHex(f(8))+toHex(f(4));
+}
+function renderEmpList(){
+  $('#empList').innerHTML=EMP.map(e=>`<div class="emprow"><span class="dot" style="background:${e.c}"></span><span>${e.n}</span><button class="clr rm" data-id="${e.id}" type="button">Quitar</button></div>`).join('')||'<p class="hint">No hay empleados en este grupo.</p>';
+}
+$('#empBtn').onclick=()=>{
+  $('#empdTitle').textContent='Empleados — '+(group==='cocina'?'Cocina':'Barra y servicio');
+  renderEmpList();
+  $('#empColor').value=hslHex((EMP.length*47)%360);
+  empd.showModal();
+};
+$('#empClose').onclick=()=>empd.close();
+empd.addEventListener('click',ev=>{if(ev.target===empd)empd.close()});
+$('#empList').addEventListener('click',ev=>{
+  const b=ev.target.closest('.rm');if(!b)return;
+  const id=b.dataset.id,e=EMP.find(x=>x.id===id);if(!e)return;
+  if(!confirm(`¿Quitar a ${e.n}? También se borran sus turnos y descansos guardados en este grupo.`))return;
+  const idx=EMP.findIndex(x=>x.id===id);if(idx>-1)EMP.splice(idx,1);
+  for(let i=shifts.length-1;i>=0;i--)if(shifts[i].emp===id)shifts.splice(i,1);
+  for(let i=rests.length-1;i>=0;i--)if(rests[i].emp===id)rests.splice(i,1);
+  save();buildPalette();render();renderRests();renderEmpList();
+});
+$('#empForm').addEventListener('submit',ev=>{
+  ev.preventDefault();
+  const name=$('#empName').value.trim();if(!name)return;
+  const color=$('#empColor').value||'#4a6fa5';
+  const id=uniqueId(slug(name));
+  EMP.push({id,n:name,c:color});
+  $('#empName').value='';
+  save();buildPalette();renderEmpList();
+  $('#empColor').value=hslHex((EMP.length*47)%360);
+});
+
 const ZS=[312,240,170,110,0];let zi=0;
 function zoom(i){
   zi=clamp(i,0,ZS.length-1);grid.style.setProperty('--cw',ZS[zi]+'px');grid.style.minWidth=ZS[zi]?'max-content':'0';
@@ -187,7 +369,7 @@ $('#zo').onclick=()=>zoom(zi+1);$('#zi').onclick=()=>zoom(zi-1);$('#zf').onclick
 $('#zf').textContent='Ver semana';
 addEventListener('resize',()=>zoom(zi));
 addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pull()});
-render();zoom(0);pull();
+buildPalette();render();renderRests();zoom(0);pull();
 </script>
 </body>
 </html>

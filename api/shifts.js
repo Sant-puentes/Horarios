@@ -1,6 +1,9 @@
 // Vercel Function (Node.js runtime, sin dependencias externas).
-// Persiste el arreglo completo de turnos en Redis usando la API REST de
-// Upstash directamente (fetch), sin instalar el SDK @upstash/redis.
+// Persiste en Redis (API REST de Upstash, vía fetch, sin el SDK @upstash/redis)
+// el estado completo de la app: un blob JSON con la forma que decida el cliente
+// (hoy: {cocina:{emp,shifts,rests}, barra:{emp,shifts,rests}}). Esta función no
+// valida esa forma interna, solo que sea JSON válido (objeto o arreglo) — así
+// el cliente puede evolucionar el formato sin requerir otro deploy de esto.
 //
 // Requiere estas dos variables de entorno en Vercel (Project Settings ->
 // Environment Variables), apuntando a la MISMA base de datos Redis que ya
@@ -35,11 +38,11 @@ module.exports = async (req, res) => {
         return;
       }
       const data = await r.json();
-      let shifts = [];
+      let value = null;
       if (data.result) {
-        try { shifts = JSON.parse(data.result); } catch (e) { shifts = []; }
+        try { value = JSON.parse(data.result); } catch (e) { value = null; }
       }
-      res.status(200).json(Array.isArray(shifts) ? shifts : []);
+      res.status(200).json(value);
       return;
     }
 
@@ -48,8 +51,8 @@ module.exports = async (req, res) => {
       if (typeof body === 'string') {
         try { body = JSON.parse(body); } catch (e) { body = null; }
       }
-      if (!Array.isArray(body)) {
-        res.status(400).json({ error: 'El cuerpo debe ser un arreglo JSON de turnos.' });
+      if (body === null || typeof body !== 'object') {
+        res.status(400).json({ error: 'El cuerpo debe ser un JSON válido (objeto o arreglo).' });
         return;
       }
 
