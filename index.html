@@ -60,8 +60,25 @@ background-size:calc(100%/6) 100%,100% 40px}
 const EMP=[{n:'Jefferson',c:'#e2622a'},{n:'Jean',c:'#2f7de1'},{n:'María',c:'#d6337f'},{n:'Alberto',c:'#12905f'},{n:'Alonso',c:'#7c4ddb'},{n:'Edgar',c:'#b7791f'}];
 const DAYS=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 const S=7,E=24,HH=40,L=6,SNAP=.5,DUR=4,N=E-S;
+const API='/api/shifts';
 let shifts=[];try{shifts=JSON.parse(localStorage.getItem('horarios-v1')||'[]')}catch(e){}
-const save=()=>{try{localStorage.setItem('horarios-v1',JSON.stringify(shifts))}catch(e){}};
+const save=()=>{
+  try{localStorage.setItem('horarios-v1',JSON.stringify(shifts))}catch(e){}
+  fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(shifts)})
+    .then(r=>{if(!r.ok)throw 0})
+    .catch(()=>toast('Guardado en este dispositivo; no se pudo sincronizar con la nube.'));
+};
+async function pull(){
+  try{
+    const r=await fetch(API);if(!r.ok)return;
+    const remote=await r.json();
+    if(Array.isArray(remote)&&remote.length){
+      shifts=remote;try{localStorage.setItem('horarios-v1',JSON.stringify(shifts))}catch(e){}render();
+    }else if(shifts.length){
+      save();
+    }
+  }catch(e){}
+}
 const $=s=>document.querySelector(s),sc=$('#sc'),grid=$('#grid'),pal=$('#pal'),msg=$('#msg');
 const snap=h=>Math.round(h/SNAP)*SNAP,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const fmt=h=>{const m=Math.round(h*60),H=Math.floor(m/60),M=m%60,x=H%24;return (x%12||12)+(M?':'+String(M).padStart(2,'0'):'')+(x<12?'am':'pm')};
@@ -169,7 +186,8 @@ function zoom(i){
 $('#zo').onclick=()=>zoom(zi+1);$('#zi').onclick=()=>zoom(zi-1);$('#zf').onclick=()=>zoom(zi===ZS.length-1?0:ZS.length-1);
 $('#zf').textContent='Ver semana';
 addEventListener('resize',()=>zoom(zi));
-render();zoom(0);
+addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pull()});
+render();zoom(0);pull();
 </script>
 </body>
 </html>
