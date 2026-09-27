@@ -33,8 +33,12 @@ button.clr{background:none;border:1px solid var(--line);color:var(--mut);border-
 .rchip{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;color:#fff;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
 .rchip i{font-style:normal}
 .sub{grid-row:3;border-left:2px solid var(--dv);background:var(--panel);display:flex;border-bottom:1px solid var(--line)}
-.sub b{text-align:center;font-size:9px;font-weight:700;font-style:normal;text-transform:uppercase;letter-spacing:.02em;color:var(--mut);padding:3px 2px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sub b+b{border-left:1px dashed var(--line)}
+.subcat{display:flex;align-items:center;gap:3px;min-width:0;padding:2px 4px;box-sizing:border-box}
+.subcat+.subcat{border-left:1px dashed var(--line)}
+.subcat b{flex:1;min-width:0;text-align:center;font-size:9px;font-weight:700;font-style:normal;text-transform:uppercase;letter-spacing:.02em;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lnbtn{flex:0 0 auto;width:14px;height:14px;border:1px solid var(--line);border-radius:50%;background:var(--panel);color:var(--mut);font:inherit;font-size:10px;font-weight:700;line-height:1;padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.lnbtn:active{background:var(--alt)}
+.lnbtn:disabled{opacity:.35;cursor:default}
 .grp{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .grp button{background:none;border:0;color:var(--mut);padding:6px 10px;font:inherit;font-size:12.5px;cursor:pointer}
 .grp button.on{background:var(--ink);color:var(--panel);font-weight:700}
@@ -53,7 +57,7 @@ background-size:calc(100%/var(--L,6)) 100%,100% 40px}
 #ov{grid-area:4/2/5/9;position:relative;z-index:2;pointer-events:none;height:calc(var(--n)*40px)}
 #divs{grid-area:4/2/5/9;position:relative;z-index:3;pointer-events:none;height:calc(var(--n)*40px);
 background-image:
-  repeating-linear-gradient(to right,var(--dv) 0,var(--dv) 3px,transparent 3px,transparent calc(100%/7)),
+  repeating-linear-gradient(to right,rgba(0,0,0,.55) 0,rgba(0,0,0,.55) 1px,var(--dv) 1px,var(--dv) 4px,rgba(255,255,255,.4) 4px,rgba(255,255,255,.4) 5px,transparent 5px,transparent calc(100%/7)),
   repeating-linear-gradient(to right,transparent 0,transparent calc(100%/7*var(--split,.5) - 1px),var(--line) calc(100%/7*var(--split,.5) - 1px),var(--line) calc(100%/7*var(--split,.5) + 1px),transparent calc(100%/7*var(--split,.5) + 1px),transparent calc(100%/7))}
 .blk{position:absolute;box-sizing:border-box;padding:1px;touch-action:none;cursor:grab;pointer-events:auto;-webkit-touch-callout:none}
 .blk .in{position:relative;height:100%;border-radius:7px;color:#fff;padding:9px 3px 3px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.25);font-size:10.5px;line-height:1.2}
@@ -71,7 +75,9 @@ background-image:
 .compact .blk .in::before{content:attr(data-i);display:block;text-align:center;font-weight:700;font-size:10px}
 .compact .rlbl{display:none}
 .compact .rest{padding:4px 3px}
-.compact .sub b{font-size:8px;padding:2px 1px}
+.compact .subcat b{font-size:8px}
+.compact .subcat{padding:2px 1px}
+.compact .lnbtn{display:none}
 .compact .rchip{padding:0;width:20px;height:20px;border-radius:50%;justify-content:center}
 .compact .rchip i{display:none}
 .compact .rchip::before{content:attr(data-i);font-weight:700;font-size:10.5px}
@@ -119,26 +125,35 @@ const DEFAULT_BARRA=[
   {id:'david',n:'David',c:'#00838f'}
 ];
 const DAYS=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
-const LANES={
+const DEFAULT_LANES={
   cocina:[{label:'Cocina',n:3},{label:'Producción',n:2}],
   barra:[{label:'Barra',n:3},{label:'Servicio',n:3}]
 };
+const LN_MIN=1,LN_MAX=6;
 const S=7,E=24,HH=40,SNAP=.5,DUR=4,N=E-S;
-let L=LANES.cocina.reduce((a,x)=>a+x.n,0);
 const API='/api/shifts';
 
 const clone=o=>JSON.parse(JSON.stringify(o));
+function normLanes(g,lanes){
+  const def=DEFAULT_LANES[g];
+  if(!Array.isArray(lanes)||lanes.length!==def.length)return clone(def);
+  return lanes.map((x,i)=>({label:def[i].label,n:Math.max(LN_MIN,Math.min(LN_MAX,+x.n||def[i].n))}));
+}
 function hasContent(d){return !!(d&&d.cocina&&d.barra&&(d.cocina.shifts.length||d.cocina.rests.length||d.barra.shifts.length||d.barra.rests.length))}
 function migrate(raw){
   if(!raw)return null;
   if(Array.isArray(raw)){
     const order=['jefferson','jean','maria','alberto','alonso','edgar'];
     return{
-      cocina:{emp:clone(DEFAULT_COCINA),shifts:raw.map(s=>({...s,emp:order[s.emp]??s.emp})),rests:[]},
-      barra:{emp:clone(DEFAULT_BARRA),shifts:[],rests:[]}
+      cocina:{emp:clone(DEFAULT_COCINA),shifts:raw.map(s=>({...s,emp:order[s.emp]??s.emp})),rests:[],lanes:clone(DEFAULT_LANES.cocina)},
+      barra:{emp:clone(DEFAULT_BARRA),shifts:[],rests:[],lanes:clone(DEFAULT_LANES.barra)}
     };
   }
-  if(raw.cocina&&raw.barra&&Array.isArray(raw.cocina.shifts)&&Array.isArray(raw.barra.shifts))return raw;
+  if(raw.cocina&&raw.barra&&Array.isArray(raw.cocina.shifts)&&Array.isArray(raw.barra.shifts)){
+    raw.cocina.lanes=normLanes('cocina',raw.cocina.lanes);
+    raw.barra.lanes=normLanes('barra',raw.barra.lanes);
+    return raw;
+  }
   return null;
 }
 
@@ -148,10 +163,11 @@ if(!DATA){
   let legacy=null;try{legacy=JSON.parse(localStorage.getItem('horarios-v1')||'null')}catch(e){}
   DATA=migrate(legacy);
 }
-if(!DATA)DATA={cocina:{emp:clone(DEFAULT_COCINA),shifts:[],rests:[]},barra:{emp:clone(DEFAULT_BARRA),shifts:[],rests:[]}};
+if(!DATA)DATA={cocina:{emp:clone(DEFAULT_COCINA),shifts:[],rests:[],lanes:clone(DEFAULT_LANES.cocina)},barra:{emp:clone(DEFAULT_BARRA),shifts:[],rests:[],lanes:clone(DEFAULT_LANES.barra)}};
 
 let group='cocina';
 let EMP=DATA.cocina.emp,shifts=DATA.cocina.shifts,rests=DATA.cocina.rests;
+let L=DATA.cocina.lanes.reduce((a,x)=>a+x.n,0);
 
 const save=()=>{
   try{localStorage.setItem('horarios-v2',JSON.stringify(DATA))}catch(e){}
@@ -183,7 +199,7 @@ let tm;function toast(t){msg.textContent=t;clearTimeout(tm);tm=setTimeout(()=>ms
 
 grid.style.setProperty('--n',N);
 function subHTML(g){
-  return LANES[g].map(x=>`<b style="flex:${x.n} ${x.n} 0%">${x.label}</b>`).join('');
+  return DATA[g].lanes.map((x,i)=>`<div class="subcat" style="flex:${x.n} ${x.n} 0%" data-cat="${i}"><button type="button" class="lnbtn lnm" data-cat="${i}" aria-label="Quitar columna de ${x.label}" ${x.n<=LN_MIN?'disabled':''}>−</button><b>${x.label}</b><button type="button" class="lnbtn lnp" data-cat="${i}" aria-label="Añadir columna a ${x.label}" ${x.n>=LN_MAX?'disabled':''}>+</button></div>`).join('');
 }
 grid.innerHTML='<div class="corner"></div>'+DAYS.map((d,i)=>`<div class="dh" style="grid-column:${i+2}"><span class="f">${d}</span><span class="s">${d.slice(0,3)}</span></div>`).join('')+
  DAYS.map((_,i)=>`<div class="rest" data-day="${i}" style="grid-column:${i+2}"></div>`).join('')+
@@ -192,9 +208,9 @@ grid.innerHTML='<div class="corner"></div>'+DAYS.map((d,i)=>`<div class="dh" sty
  DAYS.map((_,i)=>`<div class="body${i%2?' alt':''}" style="grid-column:${i+2}"></div>`).join('')+'<div id="ov"></div><div id="divs"></div>';
 const ov=$('#ov');
 function applyGroupLayout(g){
-  L=LANES[g].reduce((a,x)=>a+x.n,0);
+  L=DATA[g].lanes.reduce((a,x)=>a+x.n,0);
   grid.style.setProperty('--L',L);
-  grid.style.setProperty('--split',LANES[g][0].n/L);
+  grid.style.setProperty('--split',DATA[g].lanes[0].n/L);
   document.querySelectorAll('.sub').forEach(el=>el.innerHTML=subHTML(g));
 }
 applyGroupLayout(group);
@@ -264,6 +280,27 @@ grid.addEventListener('click',ev=>{
   const emp=rc.dataset.emp,day=+rc.dataset.day;
   const idx=rests.findIndex(r=>r.emp===emp&&r.day===day);
   if(idx>-1){rests.splice(idx,1);save();renderRests()}
+});
+
+function adjustLane(catIdx,delta){
+  const lanes=DATA[group].lanes,cat=lanes[catIdx];if(!cat)return;
+  const newN=Math.max(LN_MIN,Math.min(LN_MAX,cat.n+delta));
+  if(newN===cat.n)return;
+  const start=lanes.slice(0,catIdx).reduce((a,c)=>a+c.n,0);
+  if(delta<0){
+    const removedLane=start+cat.n-1;
+    if(shifts.some(s=>s.lane===removedLane))return toast(`La última columna de "${cat.label}" tiene turnos asignados. Muévelos o bórralos antes de quitarla.`);
+    shifts.forEach(s=>{if(s.lane>removedLane)s.lane--});
+  }else{
+    const insertAt=start+cat.n;
+    shifts.forEach(s=>{if(s.lane>=insertAt)s.lane++});
+  }
+  cat.n=newN;
+  applyGroupLayout(group);save();render();
+}
+grid.addEventListener('click',ev=>{
+  const b=ev.target.closest('.lnbtn');if(!b||b.disabled)return;
+  adjustLane(+b.dataset.cat,b.classList.contains('lnp')?1:-1);
 });
 
 function setGroup(g){
