@@ -32,4 +32,14 @@ Arriba de cada columna de día hay una franja que dice "Descanso". Si arrastras 
 
 ## Agregar y quitar empleados
 
-Ya no hace falta editar el código. Con el botón **Empleados** de la cabecera se abre un formulario para agregar a alguien (nombre + color) o quitarlo, siempre dentro del grupo que esté activo en ese momento. Quitar a un empleado también borra sus turnos y descansos guardados en ese grupo (se pide confirmación antes).
+Ya no hace falta editar el código. Con el botón **Empleados** de la cabecera (visible solo en modo edición) se abre un formulario para agregar a alguien (nombre + color) o quitarlo, siempre dentro del grupo que esté activo en ese momento. Quitar a un empleado también borra sus turnos y descansos guardados en ese grupo (se pide confirmación antes).
+
+## Modo edición (clave)
+
+Por defecto la app se abre en **solo lectura**: cualquiera puede ver los horarios, cambiar de grupo y hacer zoom, pero no arrastrar, borrar, agregar empleados ni tocar los botones +/- de columnas. Abajo a la derecha hay un botón **Editar**; al tocarlo pide una clave (por ahora, fija: `1111`) y, si es correcta, desbloquea la edición completa hasta que se toque **Bloquear** o se cierre la pestaña (la sesión de edición se guarda en `sessionStorage`, no en `localStorage`).
+
+Importante: esto es un freno para evitar ediciones accidentales, **no seguridad real**. Como todo el código corre en el navegador, la clave es visible para cualquiera que mire el código fuente de la página, y quien la conozca podría editar desde cualquier dispositivo. `api/shifts.js` también exige esa misma clave (header `x-edit-key`) antes de guardar en la nube, así que ni siquiera alguien que ataque la API directamente puede escribir sin ella — pero sigue sin ser una clave por usuario ni nada auditable. Si más adelante hace falta algo más serio, lo natural es reemplazar esto por variables de entorno por clave y, idealmente, autenticación real por persona.
+
+## Subcarriles por categoría (Cocina/Producción, Barra/Servicio)
+
+Dentro de cada día, las columnas de turnos se dividen en dos categorías con su propio ancho: en Cocina, "Cocina" (3 columnas) y "Producción" (2 columnas); en Barra y servicio, "Barra" (3) y "Servicio" (3). Los botones **+/-** junto a cada etiqueta (visibles solo en modo edición) ajustan cuántas columnas tiene esa categoría *ese día en particular* (mínimo 1, máximo 6) — no se puede quitar la última columna de una categoría si todavía tiene turnos asignados ese día.

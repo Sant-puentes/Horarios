@@ -15,10 +15,18 @@
 //
 // Además, para no pisar las claves del otro proyecto dentro de la misma
 // base de datos, todo se guarda bajo una clave exclusiva: "horarios:shifts".
+//
+// GET (lectura) es público a propósito: cualquiera puede ver el horario sin
+// clave. POST/PUT (escritura) exige el header "x-edit-key" con la misma
+// clave "1111" que se pide en la app antes de dejar editar. Es una clave
+// única y fija a propósito ("por el momento"); si más adelante se quiere
+// algo más serio, lo natural es moverla a una variable de entorno
+// (HORARIOS_EDIT_KEY) en vez de tenerla escrita aquí.
 
 const REDIS_URL = process.env.HORARIOS_KV_REST_API_URL;
 const REDIS_TOKEN = process.env.HORARIOS_KV_REST_API_TOKEN;
 const KEY = 'horarios:shifts';
+const EDIT_KEY = '1111';
 
 module.exports = async (req, res) => {
   if (!REDIS_URL || !REDIS_TOKEN) {
@@ -47,6 +55,10 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === 'POST' || req.method === 'PUT') {
+      if (req.headers['x-edit-key'] !== EDIT_KEY) {
+        res.status(401).json({ error: 'Clave de edición inválida o faltante.' });
+        return;
+      }
       let body = req.body;
       if (typeof body === 'string') {
         try { body = JSON.parse(body); } catch (e) { body = null; }

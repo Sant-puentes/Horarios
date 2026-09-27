@@ -78,6 +78,11 @@ background-size:calc(100%/var(--L,6)) 100%,100% 40px}
 .compact .rchip{padding:0;width:20px;height:20px;border-radius:50%;justify-content:center}
 .compact .rchip i{display:none}
 .compact .rchip::before{content:attr(data-i);font-weight:700;font-size:10.5px}
+.editfab{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:30;box-shadow:0 2px 10px rgba(0,0,0,.18);background:var(--panel)}
+body.editing .editfab{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+body.view-only #clr,body.view-only #empBtn,body.view-only .lnbtn{display:none}
+body.view-only .x,body.view-only .rz{display:none}
+body.view-only .blk,body.view-only .chip,body.view-only .rchip{cursor:default}
 </style>
 </head>
 <body>
@@ -87,7 +92,7 @@ background-size:calc(100%/var(--L,6)) 100%,100% 40px}
     <div class="grp" id="grp"><button data-g="cocina" class="on">Cocina</button><button data-g="barra">Barra y servicio</button></div>
     <button class="clr" id="empBtn">Empleados</button>
   </div>
-  <p class="hint">Arrastra un empleado a un día. Estira los bordes del bloque para cambiar sus horas. Para un turno partido, suelta al mismo empleado otra vez en ese día. Suelta sobre "Descanso" (arriba de cada día) para marcar que ese empleado libra ese día.</p>
+  <p class="hint" id="hint">Arrastra un empleado a un día. Estira los bordes del bloque para cambiar sus horas. Para un turno partido, suelta al mismo empleado otra vez en ese día. Suelta sobre "Descanso" (arriba de cada día) para marcar que ese empleado libra ese día.</p>
   <div id="pal"></div>
   <div id="msg"></div>
 </header>
@@ -102,6 +107,16 @@ background-size:calc(100%/var(--L,6)) 100%,100% 40px}
   </form>
   <div style="text-align:right;margin-top:14px"><button class="clr" id="empClose" type="button">Cerrar</button></div>
 </dialog>
+<dialog id="pwd">
+  <h2 style="margin:0 0 10px;font-size:15px">Modo edición</h2>
+  <p class="hint" style="margin:0 0 10px">Ingresa la clave para poder editar el tablero.</p>
+  <form id="pwdForm" style="display:flex;gap:6px;align-items:center">
+    <input id="pwdInput" type="password" inputmode="numeric" autocomplete="off" placeholder="Clave" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit">
+    <button class="clr" type="submit">Entrar</button>
+  </form>
+  <div style="text-align:right;margin-top:14px"><button class="clr" id="pwdClose" type="button">Cancelar</button></div>
+</dialog>
+<button class="clr editfab" id="editBtn">Editar</button>
 <script>
 const DEFAULT_COCINA=[
   {id:'jefferson',n:'Jefferson',c:'#e2622a'},
@@ -130,6 +145,9 @@ const DEFAULT_N={cocina:[3,2],barra:[3,3]};
 const LN_MIN=1,LN_MAX=6;
 const S=7,E=24,HH=40,SNAP=.5,DUR=4,N=E-S;
 const API='/api/shifts';
+const EDIT_PASSWORD='1111';
+let editMode=false;
+try{editMode=sessionStorage.getItem('horarios-auth')==='1'}catch(e){}
 
 const clone=o=>JSON.parse(JSON.stringify(o));
 function defaultDayLanes(g){return DEFAULT_N[g].map(n=>({n}))}
@@ -178,7 +196,7 @@ function maxDayTotal(g){return Math.max(...DATA[g].lanes.map(d=>d.reduce((a,x)=>
 
 const save=()=>{
   try{localStorage.setItem('horarios-v2',JSON.stringify(DATA))}catch(e){}
-  fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(DATA)})
+  fetch(API,{method:'POST',headers:{'Content-Type':'application/json','x-edit-key':EDIT_PASSWORD},body:JSON.stringify(DATA)})
     .then(r=>{if(!r.ok)throw 0})
     .catch(()=>toast('Guardado en este dispositivo; no se pudo sincronizar con la nube.'));
 };
@@ -299,6 +317,7 @@ function addRest(empId,day,name){
   rests.push({emp:empId,day});save();renderRests();
 }
 grid.addEventListener('click',ev=>{
+  if(!editMode)return;
   const rc=ev.target.closest('.rchip');if(!rc)return;
   const emp=rc.dataset.emp,day=+rc.dataset.day;
   const idx=rests.findIndex(r=>r.emp===emp&&r.day===day);
@@ -322,6 +341,7 @@ function adjustLane(day,catIdx,delta){
   applyGroupLayout(group);save();render();
 }
 grid.addEventListener('click',ev=>{
+  if(!editMode)return;
   const b=ev.target.closest('.lnbtn');if(!b||b.disabled)return;
   const subEl=b.closest('.sub');if(!subEl)return;
   adjustLane(+subEl.dataset.day,+b.dataset.cat,b.classList.contains('lnp')?1:-1);
@@ -351,6 +371,7 @@ function track(mv,end){
 
 /* empleados de arriba -> semana o descanso */
 pal.addEventListener('pointerdown',ev=>{
+  if(!editMode)return;
   const chip=ev.target.closest('.chip');if(!chip)return;ev.preventDefault();
   const id=chip.dataset.id,e=EMP.find(x=>x.id===id);if(!e)return;
   const g=document.createElement('div');
@@ -380,6 +401,7 @@ pal.addEventListener('pointerdown',ev=>{
 
 /* mover o estirar un turno */
 ov.addEventListener('pointerdown',ev=>{
+  if(!editMode)return;
   const n=ev.target.closest('.blk');if(!n||ev.target.closest('.x'))return;
   const s=shifts.find(o=>o.id===n.sid);if(!s)return;
   ev.preventDefault();
@@ -399,12 +421,13 @@ ov.addEventListener('pointerdown',ev=>{
   },()=>{n.classList.remove('drag');save();render()});
 });
 ov.addEventListener('click',ev=>{
+  if(!editMode)return;
   const x=ev.target.closest('.x');if(!x)return;
   const id=x.closest('.blk').sid;
   const idx=shifts.findIndex(o=>o.id===id);if(idx>-1)shifts.splice(idx,1);
   save();render();
 });
-$('#clr').onclick=()=>{if(shifts.length&&confirm('¿Vaciar todos los turnos de la semana (solo de este grupo)?')){shifts.length=0;save();render()}};
+$('#clr').onclick=()=>{if(!editMode)return;if(shifts.length&&confirm('¿Vaciar todos los turnos de la semana (solo de este grupo)?')){shifts.length=0;save();render()}};
 
 /* administrar empleados del grupo activo */
 function slug(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'')||'e'}
@@ -421,6 +444,7 @@ function renderEmpList(){
   $('#empList').innerHTML=EMP.map(e=>`<div class="emprow"><span class="dot" style="background:${e.c}"></span><span>${e.n}</span><button class="clr rm" data-id="${e.id}" type="button">Quitar</button></div>`).join('')||'<p class="hint">No hay empleados en este grupo.</p>';
 }
 $('#empBtn').onclick=()=>{
+  if(!editMode)return;
   $('#empdTitle').textContent='Empleados — '+(group==='cocina'?'Cocina':'Barra y servicio');
   renderEmpList();
   $('#empColor').value=hslHex((EMP.length*47)%360);
@@ -429,6 +453,7 @@ $('#empBtn').onclick=()=>{
 $('#empClose').onclick=()=>empd.close();
 empd.addEventListener('click',ev=>{if(ev.target===empd)empd.close()});
 $('#empList').addEventListener('click',ev=>{
+  if(!editMode)return;
   const b=ev.target.closest('.rm');if(!b)return;
   const id=b.dataset.id,e=EMP.find(x=>x.id===id);if(!e)return;
   if(!confirm(`¿Quitar a ${e.n}? También se borran sus turnos y descansos guardados en este grupo.`))return;
@@ -439,6 +464,7 @@ $('#empList').addEventListener('click',ev=>{
 });
 $('#empForm').addEventListener('submit',ev=>{
   ev.preventDefault();
+  if(!editMode)return;
   const name=$('#empName').value.trim();if(!name)return;
   const color=$('#empColor').value||'#4a6fa5';
   const id=uniqueId(slug(name));
@@ -447,6 +473,40 @@ $('#empForm').addEventListener('submit',ev=>{
   save();buildPalette();renderEmpList();
   $('#empColor').value=hslHex((EMP.length*47)%360);
 });
+
+/* candado de edición */
+function applyEditMode(){
+  document.body.classList.toggle('editing',editMode);
+  document.body.classList.toggle('view-only',!editMode);
+  $('#editBtn').textContent=editMode?'Bloquear':'Editar';
+  $('#hint').textContent=editMode
+    ?'Arrastra un empleado a un día. Estira los bordes del bloque para cambiar sus horas. Para un turno partido, suelta al mismo empleado otra vez en ese día. Suelta sobre "Descanso" (arriba de cada día) para marcar que ese empleado libra ese día.'
+    :'Estás viendo el horario en modo solo lectura. Toca "Editar" (abajo a la derecha) para hacer cambios.';
+}
+const pwd=$('#pwd');
+$('#editBtn').onclick=()=>{
+  if(editMode){
+    editMode=false;try{sessionStorage.removeItem('horarios-auth')}catch(e){}
+    applyEditMode();
+    return;
+  }
+  $('#pwdInput').value='';
+  pwd.showModal();
+  setTimeout(()=>$('#pwdInput').focus(),50);
+};
+$('#pwdClose').onclick=()=>pwd.close();
+pwd.addEventListener('click',ev=>{if(ev.target===pwd)pwd.close()});
+$('#pwdForm').addEventListener('submit',ev=>{
+  ev.preventDefault();
+  if($('#pwdInput').value===EDIT_PASSWORD){
+    editMode=true;try{sessionStorage.setItem('horarios-auth','1')}catch(e){}
+    applyEditMode();pwd.close();
+  }else{
+    toast('Clave incorrecta.');
+    $('#pwdInput').value='';$('#pwdInput').focus();
+  }
+});
+applyEditMode();
 
 const ZS=[312,240,170,110,0];let zi=0;
 function zoom(i){
