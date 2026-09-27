@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Marcar horario</title>
+<style>
+:root{--bg:#f3f5f8;--panel:#fff;--ink:#18212f;--mut:#6b7686;--line:#dfe4ea;--in:#12905f;--out:#c0392b;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f141b;--panel:#171e28;--ink:#e9eef5;--mut:#8f9bad;--line:#2a3442}}
+:root[data-theme="dark"]{--bg:#0f141b;--panel:#171e28;--ink:#e9eef5;--mut:#8f9bad;--line:#2a3442}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;align-items:center;justify-content:center;min-height:100%;padding:24px;-webkit-user-select:none;user-select:none}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:28px 24px;max-width:380px;width:100%;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.12)}
+h1{margin:0 0 4px;font-size:20px}
+p.hint{color:var(--mut);margin:0 0 22px;font-size:13.5px}
+input{width:100%;box-sizing:border-box;padding:14px;font-size:17px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;text-align:center}
+button{margin-top:12px;width:100%;padding:14px;font-size:17px;font-weight:700;border-radius:10px;border:0;background:var(--ink);color:var(--panel);cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+#result{min-height:88px;margin-top:18px;display:flex;align-items:center;justify-content:center}
+.banner{width:100%;border-radius:12px;padding:16px;font-size:15px;font-weight:600;animation:pop .18s ease}
+.banner.in{background:rgba(18,144,95,.14);color:var(--in);border:1px solid rgba(18,144,95,.35)}
+.banner.out{background:rgba(192,57,43,.14);color:var(--out);border:1px solid rgba(192,57,43,.35)}
+.banner.err{background:rgba(192,57,43,.1);color:var(--out);border:1px solid rgba(192,57,43,.25);font-weight:500;font-size:13.5px}
+.banner small{display:block;font-weight:500;opacity:.85;margin-top:4px;font-size:12.5px}
+@keyframes pop{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
+a.back{display:inline-block;margin-top:18px;color:var(--mut);font-size:12px;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Marcar horario</h1>
+  <p class="hint">Escribe tu nombre tal como aparece en el sistema y toca "Marcar". La primera vez del día registra tu entrada; la siguiente, tu salida.</p>
+  <form id="f">
+    <input id="name" list="names" placeholder="Tu nombre" autocomplete="off" autofocus required>
+    <datalist id="names"></datalist>
+    <button id="btn" type="submit">Marcar</button>
+  </form>
+  <div id="result"></div>
+  <a class="back" href="index.html">Panel de administración →</a>
+</div>
+<script>
+const $=s=>document.querySelector(s),f=$('#f'),input=$('#name'),btn=$('#btn'),result=$('#result'),names=$('#names');
+
+// carga los nombres actuales (de ambos grupos) solo para sugerir mientras se escribe
+fetch('/api/shifts').then(r=>r.ok?r.json():null).then(d=>{
+  if(!d)return;
+  const all=[...(d.cocina&&d.cocina.emp||[]),...(d.barra&&d.barra.emp||[])];
+  names.innerHTML=all.map(e=>`<option value="${e.n}">`).join('');
+}).catch(()=>{});
+
+const fmt=iso=>new Date(iso).toLocaleTimeString('es',{hour:'numeric',minute:'2-digit'});
+
+f.addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const name=input.value.trim();if(!name)return;
+  btn.disabled=true;btn.textContent='Marcando…';
+  try{
+    const r=await fetch('/api/attendance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+    const data=await r.json();
+    if(!r.ok){
+      result.innerHTML=`<div class="banner err">${data.error||'No se pudo registrar el marcaje.'}</div>`;
+    }else{
+      const rec=data.record,isIn=rec.type==='entrada';
+      result.innerHTML=`<div class="banner ${isIn?'in':'out'}">${rec.name} — ${isIn?'ENTRADA':'SALIDA'} registrada<small>${fmt(rec.ts)}</small></div>`;
+      input.value='';
+    }
+  }catch(e){
+    result.innerHTML='<div class="banner err">No se pudo conectar con el servidor. Intenta de nuevo.</div>';
+  }
+  btn.disabled=false;btn.textContent='Marcar';
+  input.focus();
+  clearTimeout(window._rt);window._rt=setTimeout(()=>result.innerHTML='',6000);
+});
+</script>
+</body>
+</html>

@@ -47,6 +47,16 @@ Las dos vistas son la misma pantalla con distinto comportamiento según si está
 - **Sin desbloquear (empleado)**: las horas totales junto a cada nombre en la paleta quedan ocultas. Al tocar el nombre de un empleado, la planilla se filtra para mostrar solo sus turnos y sus días de descanso (los del resto quedan ocultos); hay un chip **"Todos"** al inicio de la paleta para volver a ver a todo el mundo, y tocar de nuevo el mismo nombre también quita el filtro. No hay arrastre ni edición de ningún tipo.
 - **Desbloqueada (admin)**: se ven las horas totales de cada quien, y tocar/arrastrar un nombre sirve para crear turnos (drag and drop) — no filtra nada; siempre se ve la planilla completa de todos.
 
+## Control de horario (marcaje de entrada y salida)
+
+Además de la planilla de turnos *planeados*, la app registra las horas *reales* que cada empleado trabaja.
+
+- **`marcar.html`** es una página aparte, pensada para dejarla abierta en una tablet o celular en la entrada del local. Solo pide el nombre del empleado (igual a como está escrito en el sistema; hay autocompletado) — no requiere la clave de edición, para que cualquier empleado pueda usarla sin ser admin. El primer marcaje del día registra la **entrada**; el siguiente marcaje de esa misma persona registra la **salida**; el que sigue vuelve a ser entrada, y así sucesivamente. La hora que se guarda es la del servidor, no la del celular que marca, para que nadie pueda adelantarla o atrasarla.
+- Cada marcaje se guarda en Redis bajo la clave `horarios:attendance`, vía la función `api/attendance.js`, que también decide si el marcaje que llega es entrada o salida (buscando el nombre entre los empleados de Cocina y de Barra y servicio guardados en `horarios:shifts`).
+- En modo edición (admin desbloqueado), junto al selector de Cocina/Barra aparece un segundo interruptor: **Horario planeado** / **Control de horario**. Este último cambia la planilla a solo lectura y dibuja, en el mismo formato de cuadrícula, los intervalos reales de entrada-salida de la semana actual (lunes a domingo), separados por grupo. Un turno sin salida registrada se marca con borde punteado: "En curso" si es hoy, o "Sin salida" si quedó abierto un día anterior. Es intencional que solo el admin lo vea: expone las horas de entrada/salida de cada persona, información más sensible que el horario planeado.
+- Es de solo lectura: no se puede arrastrar, estirar ni borrar nada ahí; para corregir un marcaje habría que hacerlo directamente en Redis (no hay UI de edición todavía).
+- Limitación conocida: por ahora solo se ve la semana en curso (sin navegación a semanas anteriores), y no se soportan turnos que cruzan la medianoche.
+
 ## Subcarriles por categoría (Cocina/Producción, Barra/Servicio)
 
 Dentro de cada día, las columnas de turnos se dividen en dos categorías con su propio ancho: en Cocina, "Cocina" (3 columnas) y "Producción" (2 columnas); en Barra y servicio, "Barra" (3) y "Servicio" (3). Los botones **+/-** junto a cada etiqueta (visibles solo en modo edición) ajustan cuántas columnas tiene esa categoría *ese día en particular* (mínimo 1, máximo 6) — no se puede quitar la última columna de una categoría si todavía tiene turnos asignados ese día.

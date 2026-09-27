@@ -17,7 +17,7 @@ header{padding:10px 14px 8px;background:var(--panel);border-bottom:1px solid var
 h1{margin:0;font-size:18px;font-weight:700;letter-spacing:-.01em}
 .hint{color:var(--mut);font-size:12px;margin:2px 0 0}
 #msg{color:#c0392b;font-size:12.5px;min-height:16px;margin-top:2px}
-button.clr{background:none;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:5px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+button.clr,a.clr{background:none;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:5px 10px;font:inherit;font-size:12.5px;cursor:pointer;display:inline-block;box-sizing:border-box}
 #pal{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0 0}
 .chip{flex:1 1 104px;max-width:180px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border-radius:10px;color:#fff;font-weight:600;cursor:grab;touch-action:none;-webkit-touch-callout:none;box-shadow:0 1px 0 rgba(0,0,0,.18)}
 .chip small{font-weight:500;opacity:.85;font-size:11.5px}
@@ -87,6 +87,12 @@ body.view-only .chip small{display:none}
 .allchip{background:var(--mut);cursor:pointer}
 body.editing .allchip{display:none}
 .chip.sel{box-shadow:0 0 0 3px var(--ink)}
+.blk.real{cursor:default}
+.blk.real .in{opacity:.88;box-shadow:none;border:1px solid rgba(255,255,255,.35)}
+.blk.real.open .in{border-style:dashed}
+.blk.real .tag{position:absolute;top:2px;right:4px;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;opacity:.85}
+.compact .blk.real .tag{display:none}
+body.attmode #pal,body.attmode .rest,body.attmode #empBtn,body.attmode #clr,body.attmode .sub .lnbtn{display:none}
 </style>
 </head>
 <body>
@@ -94,7 +100,11 @@ body.editing .allchip{display:none}
   <div class="top"><h1>Horarios del personal</h1><div class="acts"><button class="clr" id="zo" aria-label="Alejar">−</button><button class="clr" id="zi" aria-label="Acercar">+</button><button class="clr" id="zf">Ver semana</button><button class="clr" id="clr">Vaciar</button></div></div>
   <div class="top" style="margin-top:6px">
     <div class="grp" id="grp"><button data-g="cocina" class="on">Cocina</button><button data-g="barra">Barra y servicio</button></div>
-    <button class="clr" id="empBtn">Empleados</button>
+    <div class="acts"><button class="clr" id="empBtn">Empleados</button><a class="clr" href="marcar.html" target="_blank" rel="noopener" style="text-decoration:none">Marcar horario ↗</a></div>
+  </div>
+  <div class="top" id="modeRow" style="margin-top:6px;display:none">
+    <div class="grp" id="mode"><button data-m="plan" class="on">Horario planeado</button><button data-m="real">Control de horario</button></div>
+    <button class="clr" id="realRefresh" style="display:none">Actualizar</button>
   </div>
   <p class="hint" id="hint">Arrastra un empleado a un día. Estira los bordes del bloque para cambiar sus horas. Para un turno partido, suelta al mismo empleado otra vez en ese día. Suelta sobre "Descanso" (arriba de cada día) para marcar que ese empleado libra ese día.</p>
   <div id="pal"></div>
@@ -324,7 +334,7 @@ function addRest(empId,day,name){
   rests.push({emp:empId,day});save();renderRests();
 }
 grid.addEventListener('click',ev=>{
-  if(!editMode)return;
+  if(!editMode||mode!=='plan')return;
   const rc=ev.target.closest('.rchip');if(!rc)return;
   const emp=rc.dataset.emp,day=+rc.dataset.day;
   const idx=rests.findIndex(r=>r.emp===emp&&r.day===day);
@@ -348,7 +358,7 @@ function adjustLane(day,catIdx,delta){
   applyGroupLayout(group);save();render();
 }
 grid.addEventListener('click',ev=>{
-  if(!editMode)return;
+  if(!editMode||mode!=='plan')return;
   const b=ev.target.closest('.lnbtn');if(!b||b.disabled)return;
   const subEl=b.closest('.sub');if(!subEl)return;
   adjustLane(+subEl.dataset.day,+b.dataset.cat,b.classList.contains('lnp')?1:-1);
@@ -360,10 +370,130 @@ function setGroup(g){
   filterEmp=null;
   nodes.forEach(n=>n.remove());nodes.clear();
   applyGroupLayout(g);
-  buildPalette();render();renderRests();
+  buildPalette();
   document.querySelectorAll('#grp button').forEach(b=>b.classList.toggle('on',b.dataset.g===g));
+  if(mode==='real')renderReal();else{render();renderRests()}
   zoom(zi);
 }
+
+/* ---- Control de horario: marcajes reales de entrada/salida (solo admin) ---- */
+const ATT_API='/api/attendance';
+let mode='plan';
+let ATT=[];                     // marcajes crudos devueltos por la API
+let REAL={cocina:[],barra:[]};  // intervalos ya calculados para la semana actual
+const realNodes=new Map();
+
+function mondayOfWeek(d=new Date()){
+  const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+  x.setDate(x.getDate()-((x.getDay()+6)%7)); // lunes=0 ... domingo=6
+  return x;
+}
+function dayIndexOf(date,monday){
+  const diff=Math.round((new Date(date.getFullYear(),date.getMonth(),date.getDate())-monday)/86400000);
+  return diff>=0&&diff<7?diff:null;
+}
+function computeReal(){
+  const monday=mondayOfWeek(),now=new Date(),todayIdx=dayIndexOf(now,monday);
+  const byKey=new Map();
+  ATT.forEach(r=>{
+    const ts=new Date(r.ts);if(isNaN(ts))return;
+    const day=dayIndexOf(ts,monday);if(day===null)return;
+    const k=r.group+'|'+r.empId+'|'+day;
+    if(!byKey.has(k))byKey.set(k,[]);
+    byKey.get(k).push({...r,dt:ts});
+  });
+  const out={cocina:[],barra:[]};
+  byKey.forEach((list,k)=>{
+    const[g,empId,dayStr]=k.split('|'),day=+dayStr;
+    if(!out[g])return;
+    list.sort((a,b)=>a.dt-b.dt);
+    let open=null;
+    list.forEach(r=>{
+      const h=r.dt.getHours()+r.dt.getMinutes()/60;
+      if(r.type==='entrada'){
+        if(!open)open={start:clamp(h,S,E)};
+      }else if(r.type==='salida'&&open){
+        out[g].push({id:k+'@'+open.start,emp:empId,day,start:open.start,end:clamp(Math.max(h,open.start+SNAP),S,E),open:false});
+        open=null;
+      }
+    });
+    if(open){
+      const isToday=day===todayIdx;
+      const end=isToday?clamp(Math.max(now.getHours()+now.getMinutes()/60,open.start+SNAP),S,E):E;
+      out[g].push({id:k+'@'+open.start,emp:empId,day,start:open.start,end,open:true,missing:!isToday});
+    }
+  });
+  REAL=out;
+}
+function packLanesFor(g){
+  // asigna carriles evitando choques, respetando cuántas columnas tiene ese día en ese grupo
+  REAL[g].forEach(iv=>{
+    const Ld=DATA[g].lanes[iv.day].reduce((a,x)=>a+x.n,0);
+    const used=REAL[g].filter(o=>o!==iv&&o.day===iv.day&&iv.start<o.end&&iv.end>o.start).map(o=>o.lane);
+    let lane=0;while(used.includes(lane)&&lane<Ld-1)lane++;
+    iv.lane=lane;
+  });
+}
+async function loadReal(){
+  try{
+    const r=await fetch(ATT_API);if(!r.ok)throw 0;
+    ATT=await r.json()||[];
+  }catch(e){toast('No se pudo actualizar el control de horario desde la nube.')}
+  computeReal();
+  packLanesFor('cocina');packLanesFor('barra');
+  if(mode==='real')renderReal();
+}
+function renderReal(){
+  const list=REAL[group]||[];
+  const ids=new Set(list.map(iv=>iv.id));
+  realNodes.forEach((n,id)=>{if(!ids.has(id)){n.remove();realNodes.delete(id)}});
+  const dayPct=100/7;
+  list.forEach(iv=>{
+    const e=EMP.find(x=>x.id===iv.emp);if(!e)return;
+    let n=realNodes.get(iv.id);
+    if(!n){
+      n=document.createElement('div');n.className='blk real';
+      n.innerHTML=`<div class="in" data-i="${e.n[0]}" style="background:${e.c}"><b></b><span></span><span class="tag"></span></div>`;
+      ov.appendChild(n);realNodes.set(iv.id,n);
+    }
+    const Ld=dayTotal(iv.day);
+    n.classList.toggle('open',!!iv.open);
+    n.style.cssText=`left:${iv.day*dayPct+(iv.lane/Ld)*dayPct}%;width:${dayPct/Ld}%;top:${(iv.start-S)*HH}px;height:${(iv.end-iv.start)*HH}px`;
+    n.querySelector('b').textContent=e.n;
+    n.querySelector('span').innerHTML=fmt(iv.start)+' – '+fmt(iv.end);
+    n.querySelector('.tag').textContent=iv.open?(iv.missing?'Sin salida':'En curso'):'';
+  });
+  EMP.forEach(e=>{
+    const h=list.filter(iv=>iv.emp===e.id).reduce((a,iv)=>a+(iv.end-iv.start),0);
+    const el=$('#t-'+e.id);if(el)el.textContent=dur(h)+' h';
+  });
+}
+function updateHint(){
+  $('#hint').textContent = mode==='real'
+    ? 'Horas reales según los marcajes de esta semana (lunes a domingo), separadas por grupo. Solo lectura — los marcajes se registran desde "Marcar horario". Un borde punteado indica un turno sin cerrar.'
+    : editMode
+      ? 'Arrastra un empleado a un día. Estira los bordes del bloque para cambiar sus horas. Para un turno partido, suelta al mismo empleado otra vez en ese día. Suelta sobre "Descanso" (arriba de cada día) para marcar que ese empleado libra ese día.'
+      : 'Toca tu nombre arriba para ver solo tu horario. Toca "Todos" para volver a ver a todos.';
+}
+function setMode(m){
+  mode=m;
+  document.querySelectorAll('#mode button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
+  document.body.classList.toggle('attmode',m==='real');
+  $('#realRefresh').style.display=m==='real'?'':'none';
+  updateHint();
+  if(m==='real'){
+    nodes.forEach(n=>n.remove());nodes.clear();
+    loadReal();
+  }else{
+    realNodes.forEach(n=>n.remove());realNodes.clear();
+    render();renderRests();
+  }
+}
+$('#mode').addEventListener('click',ev=>{
+  const b=ev.target.closest('button');if(!b||!editMode||b.dataset.m===mode)return;
+  setMode(b.dataset.m);
+});
+$('#realRefresh').onclick=()=>{if(mode==='real')loadReal()};
 $('#grp').addEventListener('click',ev=>{
   const b=ev.target.closest('button');if(!b||b.dataset.g===group)return;
   setGroup(b.dataset.g);
@@ -393,7 +523,7 @@ function track(mv,end){
 
 /* empleados de arriba -> semana o descanso */
 pal.addEventListener('pointerdown',ev=>{
-  if(!editMode)return;
+  if(!editMode||mode!=='plan')return;
   const chip=ev.target.closest('.chip');if(!chip)return;ev.preventDefault();
   const id=chip.dataset.id,e=EMP.find(x=>x.id===id);if(!e)return;
   const g=document.createElement('div');
@@ -423,7 +553,7 @@ pal.addEventListener('pointerdown',ev=>{
 
 /* mover o estirar un turno */
 ov.addEventListener('pointerdown',ev=>{
-  if(!editMode)return;
+  if(!editMode||mode!=='plan')return;
   const n=ev.target.closest('.blk');if(!n||ev.target.closest('.x'))return;
   const s=shifts.find(o=>o.id===n.sid);if(!s)return;
   ev.preventDefault();
@@ -443,13 +573,13 @@ ov.addEventListener('pointerdown',ev=>{
   },()=>{n.classList.remove('drag');save();render()});
 });
 ov.addEventListener('click',ev=>{
-  if(!editMode)return;
+  if(!editMode||mode!=='plan')return;
   const x=ev.target.closest('.x');if(!x)return;
   const id=x.closest('.blk').sid;
   const idx=shifts.findIndex(o=>o.id===id);if(idx>-1)shifts.splice(idx,1);
   save();render();
 });
-$('#clr').onclick=()=>{if(!editMode)return;if(shifts.length&&confirm('¿Vaciar todos los turnos de la semana (solo de este grupo)?')){shifts.length=0;save();render()}};
+$('#clr').onclick=()=>{if(!editMode||mode!=='plan')return;if(shifts.length&&confirm('¿Vaciar todos los turnos de la semana (solo de este grupo)?')){shifts.length=0;save();render()}};
 
 /* administrar empleados del grupo activo */
 function slug(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'')||'e'}
@@ -466,7 +596,7 @@ function renderEmpList(){
   $('#empList').innerHTML=EMP.map(e=>`<div class="emprow"><span class="dot" style="background:${e.c}"></span><span>${e.n}</span><button class="clr rm" data-id="${e.id}" type="button">Quitar</button></div>`).join('')||'<p class="hint">No hay empleados en este grupo.</p>';
 }
 $('#empBtn').onclick=()=>{
-  if(!editMode)return;
+  if(!editMode||mode!=='plan')return;
   $('#empdTitle').textContent='Empleados — '+(group==='cocina'?'Cocina':'Barra y servicio');
   renderEmpList();
   $('#empColor').value=hslHex((EMP.length*47)%360);
@@ -475,7 +605,7 @@ $('#empBtn').onclick=()=>{
 $('#empClose').onclick=()=>empd.close();
 empd.addEventListener('click',ev=>{if(ev.target===empd)empd.close()});
 $('#empList').addEventListener('click',ev=>{
-  if(!editMode)return;
+  if(!editMode||mode!=='plan')return;
   const b=ev.target.closest('.rm');if(!b)return;
   const id=b.dataset.id,e=EMP.find(x=>x.id===id);if(!e)return;
   if(!confirm(`¿Quitar a ${e.n}? También se borran sus turnos y descansos guardados en este grupo.`))return;
@@ -486,7 +616,7 @@ $('#empList').addEventListener('click',ev=>{
 });
 $('#empForm').addEventListener('submit',ev=>{
   ev.preventDefault();
-  if(!editMode)return;
+  if(!editMode||mode!=='plan')return;
   const name=$('#empName').value.trim();if(!name)return;
   const color=$('#empColor').value||'#4a6fa5';
   const id=uniqueId(slug(name));
@@ -501,9 +631,9 @@ function applyEditMode(){
   document.body.classList.toggle('editing',editMode);
   document.body.classList.toggle('view-only',!editMode);
   $('#editBtn').textContent=editMode?'Bloquear':'Editar';
-  $('#hint').textContent=editMode
-    ?'Arrastra un empleado a un día. Estira los bordes del bloque para cambiar sus horas. Para un turno partido, suelta al mismo empleado otra vez en ese día. Suelta sobre "Descanso" (arriba de cada día) para marcar que ese empleado libra ese día.'
-    :'Toca tu nombre arriba para ver solo tu horario. Toca "Todos" para volver a ver a todos.';
+  $('#modeRow').style.display=editMode?'':'none';
+  if(!editMode&&mode==='real')setMode('plan'); // el control de horario es solo para admin
+  updateHint();
   document.querySelectorAll('.chip[data-id]').forEach(c=>c.classList.toggle('sel',!editMode&&c.dataset.id===filterEmp));
   const all=$('#allBtn');if(all)all.classList.toggle('sel',!editMode&&!filterEmp);
   render();renderRests();
@@ -541,7 +671,7 @@ function zoom(i){
 $('#zo').onclick=()=>zoom(zi+1);$('#zi').onclick=()=>zoom(zi-1);$('#zf').onclick=()=>zoom(zi===ZS.length-1?0:ZS.length-1);
 $('#zf').textContent='Ver semana';
 addEventListener('resize',()=>zoom(zi));
-addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pull()});
+addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){pull();if(mode==='real')loadReal()}});
 buildPalette();render();renderRests();zoom(0);pull();
 </script>
 </body>
