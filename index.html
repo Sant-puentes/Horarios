@@ -55,10 +55,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 background-image:linear-gradient(to right,var(--line2) 1px,transparent 1px),linear-gradient(to bottom,var(--line) 1px,transparent 1px);
 background-size:calc(100%/var(--L,6)) 100%,100% 40px}
 #ov{grid-area:4/2/5/9;position:relative;z-index:2;pointer-events:none;height:calc(var(--n)*40px)}
-#divs{grid-area:4/2/5/9;position:relative;z-index:3;pointer-events:none;height:calc(var(--n)*40px);
-background-image:
-  repeating-linear-gradient(to right,rgba(0,0,0,.55) 0,rgba(0,0,0,.55) 1px,var(--dv) 1px,var(--dv) 4px,rgba(255,255,255,.4) 4px,rgba(255,255,255,.4) 5px,transparent 5px,transparent calc(100%/7)),
-  repeating-linear-gradient(to right,transparent 0,transparent calc(100%/7*var(--split,.5) - 1px),var(--line) calc(100%/7*var(--split,.5) - 1px),var(--line) calc(100%/7*var(--split,.5) + 1px),transparent calc(100%/7*var(--split,.5) + 1px),transparent calc(100%/7))}
+#divs{grid-area:4/2/5/9;position:relative;z-index:3;pointer-events:none;height:calc(var(--n)*40px)}
 .blk{position:absolute;box-sizing:border-box;padding:1px;touch-action:none;cursor:grab;pointer-events:auto;-webkit-touch-callout:none}
 .blk .in{position:relative;height:100%;border-radius:7px;color:#fff;padding:9px 3px 3px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.25);font-size:10.5px;line-height:1.2}
 .blk b{display:block;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.02em}
@@ -125,19 +122,28 @@ const DEFAULT_BARRA=[
   {id:'david',n:'David',c:'#00838f'}
 ];
 const DAYS=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
-const DEFAULT_LANES={
-  cocina:[{label:'Cocina',n:3},{label:'Producción',n:2}],
-  barra:[{label:'Barra',n:3},{label:'Servicio',n:3}]
+const CAT_LABELS={
+  cocina:['Cocina','Producción'],
+  barra:['Barra','Servicio']
 };
+const DEFAULT_N={cocina:[3,2],barra:[3,3]};
 const LN_MIN=1,LN_MAX=6;
 const S=7,E=24,HH=40,SNAP=.5,DUR=4,N=E-S;
 const API='/api/shifts';
 
 const clone=o=>JSON.parse(JSON.stringify(o));
+function defaultDayLanes(g){return DEFAULT_N[g].map(n=>({n}))}
+function defaultLanes(g){return Array.from({length:7},()=>defaultDayLanes(g))}
 function normLanes(g,lanes){
-  const def=DEFAULT_LANES[g];
-  if(!Array.isArray(lanes)||lanes.length!==def.length)return clone(def);
-  return lanes.map((x,i)=>({label:def[i].label,n:Math.max(LN_MIN,Math.min(LN_MAX,+x.n||def[i].n))}));
+  const catN=DEFAULT_N[g].length;
+  if(Array.isArray(lanes)&&lanes.length===7&&lanes.every(d=>Array.isArray(d)&&d.length===catN)){
+    return lanes.map(d=>d.map((x,i)=>({n:Math.max(LN_MIN,Math.min(LN_MAX,+x.n||DEFAULT_N[g][i]))})));
+  }
+  if(Array.isArray(lanes)&&lanes.length===catN&&lanes.every(x=>x&&typeof x.n==='number')){
+    const base=lanes.map((x,i)=>Math.max(LN_MIN,Math.min(LN_MAX,+x.n||DEFAULT_N[g][i])));
+    return Array.from({length:7},()=>base.map(n=>({n})));
+  }
+  return defaultLanes(g);
 }
 function hasContent(d){return !!(d&&d.cocina&&d.barra&&(d.cocina.shifts.length||d.cocina.rests.length||d.barra.shifts.length||d.barra.rests.length))}
 function migrate(raw){
@@ -145,8 +151,8 @@ function migrate(raw){
   if(Array.isArray(raw)){
     const order=['jefferson','jean','maria','alberto','alonso','edgar'];
     return{
-      cocina:{emp:clone(DEFAULT_COCINA),shifts:raw.map(s=>({...s,emp:order[s.emp]??s.emp})),rests:[],lanes:clone(DEFAULT_LANES.cocina)},
-      barra:{emp:clone(DEFAULT_BARRA),shifts:[],rests:[],lanes:clone(DEFAULT_LANES.barra)}
+      cocina:{emp:clone(DEFAULT_COCINA),shifts:raw.map(s=>({...s,emp:order[s.emp]??s.emp})),rests:[],lanes:defaultLanes('cocina')},
+      barra:{emp:clone(DEFAULT_BARRA),shifts:[],rests:[],lanes:defaultLanes('barra')}
     };
   }
   if(raw.cocina&&raw.barra&&Array.isArray(raw.cocina.shifts)&&Array.isArray(raw.barra.shifts)){
@@ -163,11 +169,12 @@ if(!DATA){
   let legacy=null;try{legacy=JSON.parse(localStorage.getItem('horarios-v1')||'null')}catch(e){}
   DATA=migrate(legacy);
 }
-if(!DATA)DATA={cocina:{emp:clone(DEFAULT_COCINA),shifts:[],rests:[],lanes:clone(DEFAULT_LANES.cocina)},barra:{emp:clone(DEFAULT_BARRA),shifts:[],rests:[],lanes:clone(DEFAULT_LANES.barra)}};
+if(!DATA)DATA={cocina:{emp:clone(DEFAULT_COCINA),shifts:[],rests:[],lanes:defaultLanes('cocina')},barra:{emp:clone(DEFAULT_BARRA),shifts:[],rests:[],lanes:defaultLanes('barra')}};
 
 let group='cocina';
 let EMP=DATA.cocina.emp,shifts=DATA.cocina.shifts,rests=DATA.cocina.rests;
-let L=DATA.cocina.lanes.reduce((a,x)=>a+x.n,0);
+function dayTotal(day){return DATA[group].lanes[day].reduce((a,x)=>a+x.n,0)}
+function maxDayTotal(g){return Math.max(...DATA[g].lanes.map(d=>d.reduce((a,x)=>a+x.n,0)))}
 
 const save=()=>{
   try{localStorage.setItem('horarios-v2',JSON.stringify(DATA))}catch(e){}
@@ -198,20 +205,33 @@ const lab=h=>((h%24)%12||12)+(h%24<12?' AM':' PM');
 let tm;function toast(t){msg.textContent=t;clearTimeout(tm);tm=setTimeout(()=>msg.textContent='',2800)}
 
 grid.style.setProperty('--n',N);
-function subHTML(g){
-  return DATA[g].lanes.map((x,i)=>`<div class="subcat" style="flex:${x.n} ${x.n} 0%" data-cat="${i}"><button type="button" class="lnbtn lnm" data-cat="${i}" aria-label="Quitar columna de ${x.label}" ${x.n<=LN_MIN?'disabled':''}>−</button><b>${x.label}</b><button type="button" class="lnbtn lnp" data-cat="${i}" aria-label="Añadir columna a ${x.label}" ${x.n>=LN_MAX?'disabled':''}>+</button></div>`).join('');
+function subHTML(g,day){
+  return DATA[g].lanes[day].map((x,i)=>`<div class="subcat" style="flex:${x.n} ${x.n} 0%" data-cat="${i}"><button type="button" class="lnbtn lnm" data-cat="${i}" aria-label="Quitar columna de ${CAT_LABELS[g][i]} (${DAYS[day]})" ${x.n<=LN_MIN?'disabled':''}>−</button><b>${CAT_LABELS[g][i]}</b><button type="button" class="lnbtn lnp" data-cat="${i}" aria-label="Añadir columna a ${CAT_LABELS[g][i]} (${DAYS[day]})" ${x.n>=LN_MAX?'disabled':''}>+</button></div>`).join('');
 }
 grid.innerHTML='<div class="corner"></div>'+DAYS.map((d,i)=>`<div class="dh" style="grid-column:${i+2}"><span class="f">${d}</span><span class="s">${d.slice(0,3)}</span></div>`).join('')+
  DAYS.map((_,i)=>`<div class="rest" data-day="${i}" style="grid-column:${i+2}"></div>`).join('')+
- DAYS.map((_,i)=>`<div class="sub" data-day="${i}" style="grid-column:${i+2}">${subHTML('cocina')}</div>`).join('')+
+ DAYS.map((_,i)=>`<div class="sub" data-day="${i}" style="grid-column:${i+2}">${subHTML('cocina',i)}</div>`).join('')+
  '<div class="gut">'+Array.from({length:N},(_,i)=>`<div>${lab(S+i)}</div>`).join('')+'</div>'+
- DAYS.map((_,i)=>`<div class="body${i%2?' alt':''}" style="grid-column:${i+2}"></div>`).join('')+'<div id="ov"></div><div id="divs"></div>';
-const ov=$('#ov');
+ DAYS.map((_,i)=>`<div class="body${i%2?' alt':''}" data-day="${i}" style="grid-column:${i+2}"></div>`).join('')+'<div id="ov"></div><div id="divs"></div>';
+const ov=$('#ov'),divs=$('#divs');
+function updateDivsBackground(g){
+  const dayPct=100/7,parts=[];
+  for(let d=0;d<7;d++){
+    const lanes=DATA[g].lanes[d],total=lanes.reduce((a,x)=>a+x.n,0);
+    let acc=0;
+    for(let c=0;c<lanes.length-1;c++){
+      acc+=lanes[c].n;
+      const p=d*dayPct+(acc/total)*dayPct;
+      parts.push(`linear-gradient(to right,transparent 0,transparent calc(${p}% - 1px),var(--line) calc(${p}% - 1px),var(--line) calc(${p}% + 1px),transparent calc(${p}% + 1px),transparent 100%)`);
+    }
+  }
+  const dayDivider='repeating-linear-gradient(to right,rgba(0,0,0,.55) 0,rgba(0,0,0,.55) 1px,var(--dv) 1px,var(--dv) 4px,rgba(255,255,255,.4) 4px,rgba(255,255,255,.4) 5px,transparent 5px,transparent calc(100%/7))';
+  divs.style.backgroundImage=[dayDivider,...parts].join(',');
+}
 function applyGroupLayout(g){
-  L=DATA[g].lanes.reduce((a,x)=>a+x.n,0);
-  grid.style.setProperty('--L',L);
-  grid.style.setProperty('--split',DATA[g].lanes[0].n/L);
-  document.querySelectorAll('.sub').forEach(el=>el.innerHTML=subHTML(g));
+  document.querySelectorAll('.sub').forEach(el=>{const day=+el.dataset.day;el.innerHTML=subHTML(g,day)});
+  document.querySelectorAll('.body').forEach(el=>{const day=+el.dataset.day;el.style.setProperty('--L',DATA[g].lanes[day].reduce((a,x)=>a+x.n,0))});
+  updateDivsBackground(g);
 }
 applyGroupLayout(group);
 document.addEventListener('contextmenu',e=>e.preventDefault());
@@ -223,8 +243,9 @@ function buildPalette(){
 function locate(x,y){
   const s=sc.getBoundingClientRect(),r=ov.getBoundingClientRect();
   if(y<s.top||y>s.bottom||x<r.left||x>=r.right||x<s.left)return null;
-  const k=clamp(Math.floor((x-r.left)/r.width*7*L),0,7*L-1);
-  return{day:Math.floor(k/L),lane:k%L,h:S+(y-r.top)/HH};
+  const dayW=r.width/7,day=clamp(Math.floor((x-r.left)/dayW),0,6),Ld=dayTotal(day);
+  const lane=clamp(Math.floor((x-(r.left+day*dayW))/dayW*Ld),0,Ld-1);
+  return{day,lane,h:S+(y-r.top)/HH};
 }
 function restDay(x,y){
   for(const c of document.querySelectorAll('.rest')){
@@ -235,7 +256,8 @@ function restDay(x,y){
 }
 function fit(s,day,lane,a,b){
   if(shifts.some(o=>o.id!==s.id&&o.emp===s.emp&&o.day===day&&a<o.end&&b>o.start))return -2;
-  const ord=[...Array(L).keys()].sort((x,y)=>Math.abs(x-lane)-Math.abs(y-lane));
+  const Ld=dayTotal(day);
+  const ord=[...Array(Ld).keys()].sort((x,y)=>Math.abs(x-lane)-Math.abs(y-lane));
   const l=ord.find(k=>!shifts.some(o=>o.id!==s.id&&o.day===day&&o.lane===k&&a<o.end&&b>o.start));
   return l===undefined?-1:l;
 }
@@ -253,7 +275,8 @@ function render(){
       n.innerHTML=`<div class="in" data-i="${e.n[0]}" style="background:${e.c}"><div class="rz t" data-m="t"></div><b>${e.n}</b><span></span><button class="x" aria-label="Quitar turno">×</button><div class="rz b" data-m="b"></div></div>`;
       ov.appendChild(n);nodes.set(s.id,n);
     }
-    n.style.cssText=`left:${(s.day*L+s.lane)*100/(7*L)}%;width:${100/(7*L)}%;top:${(s.start-S)*HH}px;height:${(s.end-s.start)*HH}px`;
+    const Ld=dayTotal(s.day),dayPct=100/7;
+    n.style.cssText=`left:${s.day*dayPct+(s.lane/Ld)*dayPct}%;width:${dayPct/Ld}%;top:${(s.start-S)*HH}px;height:${(s.end-s.start)*HH}px`;
     n.querySelector('span').innerHTML=fmt(s.start)+'<br>'+fmt(s.end);
   });
   EMP.forEach(e=>{
@@ -282,25 +305,26 @@ grid.addEventListener('click',ev=>{
   if(idx>-1){rests.splice(idx,1);save();renderRests()}
 });
 
-function adjustLane(catIdx,delta){
-  const lanes=DATA[group].lanes,cat=lanes[catIdx];if(!cat)return;
+function adjustLane(day,catIdx,delta){
+  const lanes=DATA[group].lanes[day],cat=lanes[catIdx];if(!cat)return;
   const newN=Math.max(LN_MIN,Math.min(LN_MAX,cat.n+delta));
   if(newN===cat.n)return;
   const start=lanes.slice(0,catIdx).reduce((a,c)=>a+c.n,0);
   if(delta<0){
     const removedLane=start+cat.n-1;
-    if(shifts.some(s=>s.lane===removedLane))return toast(`La última columna de "${cat.label}" tiene turnos asignados. Muévelos o bórralos antes de quitarla.`);
-    shifts.forEach(s=>{if(s.lane>removedLane)s.lane--});
+    if(shifts.some(s=>s.day===day&&s.lane===removedLane))return toast(`La última columna de "${CAT_LABELS[group][catIdx]}" el ${DAYS[day]} tiene turnos asignados. Muévelos o bórralos antes de quitarla.`);
+    shifts.forEach(s=>{if(s.day===day&&s.lane>removedLane)s.lane--});
   }else{
     const insertAt=start+cat.n;
-    shifts.forEach(s=>{if(s.lane>=insertAt)s.lane++});
+    shifts.forEach(s=>{if(s.day===day&&s.lane>=insertAt)s.lane++});
   }
   cat.n=newN;
   applyGroupLayout(group);save();render();
 }
 grid.addEventListener('click',ev=>{
   const b=ev.target.closest('.lnbtn');if(!b||b.disabled)return;
-  adjustLane(+b.dataset.cat,b.classList.contains('lnp')?1:-1);
+  const subEl=b.closest('.sub');if(!subEl)return;
+  adjustLane(+subEl.dataset.day,+b.dataset.cat,b.classList.contains('lnp')?1:-1);
 });
 
 function setGroup(g){
@@ -427,7 +451,7 @@ $('#empForm').addEventListener('submit',ev=>{
 const ZS=[312,240,170,110,0];let zi=0;
 function zoom(i){
   zi=clamp(i,0,ZS.length-1);grid.style.setProperty('--cw',ZS[zi]+'px');grid.style.minWidth=ZS[zi]?'max-content':'0';
-  requestAnimationFrame(()=>grid.classList.toggle('compact',ov.clientWidth/(7*L)<36));
+  requestAnimationFrame(()=>grid.classList.toggle('compact',ov.clientWidth/(7*maxDayTotal(group))<36));
 }
 $('#zo').onclick=()=>zoom(zi+1);$('#zi').onclick=()=>zoom(zi-1);$('#zf').onclick=()=>zoom(zi===ZS.length-1?0:ZS.length-1);
 $('#zf').textContent='Ver semana';
