@@ -83,6 +83,10 @@ body.editing .editfab{background:var(--ink);color:var(--panel);border-color:var(
 body.view-only #clr,body.view-only #empBtn,body.view-only .lnbtn{display:none}
 body.view-only .x,body.view-only .rz{display:none}
 body.view-only .blk,body.view-only .chip,body.view-only .rchip{cursor:default}
+body.view-only .chip small{display:none}
+.allchip{background:var(--mut);cursor:pointer}
+body.editing .allchip{display:none}
+.chip.sel{box-shadow:0 0 0 3px var(--ink)}
 </style>
 </head>
 <body>
@@ -148,6 +152,7 @@ const API='/api/shifts';
 const EDIT_PASSWORD='1111';
 let editMode=false;
 try{editMode=sessionStorage.getItem('horarios-auth')==='1'}catch(e){}
+let filterEmp=null;
 
 const clone=o=>JSON.parse(JSON.stringify(o));
 function defaultDayLanes(g){return DEFAULT_N[g].map(n=>({n}))}
@@ -255,7 +260,8 @@ applyGroupLayout(group);
 document.addEventListener('contextmenu',e=>e.preventDefault());
 
 function buildPalette(){
-  pal.innerHTML=EMP.map(e=>`<div class="chip" data-id="${e.id}" style="background:${e.c}">${e.n}<small id="t-${e.id}">0 h</small></div>`).join('');
+  pal.innerHTML='<div class="chip allchip" id="allBtn">Todos</div>'+
+    EMP.map(e=>`<div class="chip" data-id="${e.id}" style="background:${e.c}">${e.n}<small id="t-${e.id}">0 h</small></div>`).join('');
 }
 
 function locate(x,y){
@@ -296,6 +302,7 @@ function render(){
     const Ld=dayTotal(s.day),dayPct=100/7;
     n.style.cssText=`left:${s.day*dayPct+(s.lane/Ld)*dayPct}%;width:${dayPct/Ld}%;top:${(s.start-S)*HH}px;height:${(s.end-s.start)*HH}px`;
     n.querySelector('span').innerHTML=fmt(s.start)+'<br>'+fmt(s.end);
+    n.style.display=(!editMode&&filterEmp&&s.emp!==filterEmp)?'none':'';
   });
   EMP.forEach(e=>{
     const h=shifts.filter(s=>s.emp===e.id).reduce((a,s)=>a+s.end-s.start,0);
@@ -305,7 +312,7 @@ function render(){
 function renderRests(){
   document.querySelectorAll('.rest').forEach(c=>{
     const day=+c.dataset.day;
-    const chips=rests.filter(r=>r.day===day).map(r=>{
+    const chips=rests.filter(r=>r.day===day&&(editMode||!filterEmp||r.emp===filterEmp)).map(r=>{
       const e=EMP.find(x=>x.id===r.emp);if(!e)return '';
       return `<span class="rchip" data-emp="${e.id}" data-day="${day}" style="background:${e.c}" data-i="${e.n[0]}"><i>${e.n}</i></span>`;
     }).join('');
@@ -350,6 +357,7 @@ grid.addEventListener('click',ev=>{
 function setGroup(g){
   group=g;
   EMP=DATA[g].emp;shifts=DATA[g].shifts;rests=DATA[g].rests;
+  filterEmp=null;
   nodes.forEach(n=>n.remove());nodes.clear();
   applyGroupLayout(g);
   buildPalette();render();renderRests();
@@ -359,6 +367,20 @@ function setGroup(g){
 $('#grp').addEventListener('click',ev=>{
   const b=ev.target.closest('button');if(!b||b.dataset.g===group)return;
   setGroup(b.dataset.g);
+});
+
+function applyFilter(){
+  document.querySelectorAll('.chip[data-id]').forEach(c=>c.classList.toggle('sel',c.dataset.id===filterEmp));
+  const all=$('#allBtn');if(all)all.classList.toggle('sel',!filterEmp);
+  render();renderRests();
+}
+pal.addEventListener('click',ev=>{
+  if(editMode)return;
+  if(ev.target.closest('.allchip')){filterEmp=null;applyFilter();return;}
+  const chip=ev.target.closest('.chip[data-id]');if(!chip)return;
+  const id=chip.dataset.id;
+  filterEmp=(filterEmp===id)?null:id;
+  applyFilter();
 });
 
 /* seguimiento del puntero (evita que el dedo desplace la página) */
@@ -481,7 +503,10 @@ function applyEditMode(){
   $('#editBtn').textContent=editMode?'Bloquear':'Editar';
   $('#hint').textContent=editMode
     ?'Arrastra un empleado a un día. Estira los bordes del bloque para cambiar sus horas. Para un turno partido, suelta al mismo empleado otra vez en ese día. Suelta sobre "Descanso" (arriba de cada día) para marcar que ese empleado libra ese día.'
-    :'Estás viendo el horario en modo solo lectura. Toca "Editar" (abajo a la derecha) para hacer cambios.';
+    :'Toca tu nombre arriba para ver solo tu horario. Toca "Todos" para volver a ver a todos.';
+  document.querySelectorAll('.chip[data-id]').forEach(c=>c.classList.toggle('sel',!editMode&&c.dataset.id===filterEmp));
+  const all=$('#allBtn');if(all)all.classList.toggle('sel',!editMode&&!filterEmp);
+  render();renderRests();
 }
 const pwd=$('#pwd');
 $('#editBtn').onclick=()=>{
