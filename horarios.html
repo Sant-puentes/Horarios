@@ -18,7 +18,7 @@ header{padding:10px 14px 8px;background:var(--panel);border-bottom:1px solid var
 h1{margin:0;font-size:18px;font-weight:700;letter-spacing:-.01em}
 .hint{color:var(--mut);font-size:12px;margin:2px 0 0}
 #msg{color:#c0392b;font-size:12.5px;min-height:16px;margin-top:2px}
-button.clr,a.clr{background:none;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:5px 10px;font:inherit;font-size:12.5px;cursor:pointer;display:inline-block;box-sizing:border-box}
+button.clr,a.clr,select.clr{background:none;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:5px 10px;font:inherit;font-size:12.5px;cursor:pointer;display:inline-block;box-sizing:border-box}
 #pal{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0 0}
 .chip{flex:1 1 104px;max-width:180px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border-radius:10px;color:#fff;font-weight:600;cursor:grab;touch-action:none;-webkit-touch-callout:none;box-shadow:0 1px 0 rgba(0,0,0,.18)}
 .chip small{font-weight:500;opacity:.85;font-size:11.5px}
@@ -106,7 +106,7 @@ body.attmode #pal,body.attmode .rest,body.attmode #empBtn,body.attmode #clr,body
   </div>
   <div class="top" id="modeRow" style="margin-top:6px;display:none">
     <div class="grp" id="mode"><button data-m="plan" class="on">Horario planeado</button><button data-m="real">Control de horario</button></div>
-    <button class="clr" id="realRefresh" style="display:none">Actualizar</button>
+    <div class="acts"><select class="clr" id="weekSel" style="display:none"></select><button class="clr" id="realRefresh" style="display:none">Actualizar</button></div>
   </div>
   <p class="hint" id="hint">Arrastra un empleado a un día. Estira los bordes del bloque para cambiar sus horas. Para un turno partido, suelta al mismo empleado otra vez en ese día. Suelta sobre "Descanso" (arriba de cada día) para marcar que ese empleado libra ese día.</p>
   <div id="pal"></div>
@@ -382,21 +382,47 @@ function setGroup(g){
 /* ---- Control de horario: marcajes reales de entrada/salida (solo admin) ---- */
 const ATT_API='/api/attendance';
 let mode='plan';
-let ATT=[];                     // marcajes crudos devueltos por la API
-let REAL={cocina:[],barra:[]};  // intervalos ya calculados para la semana actual
+let ATT=[];                     // marcajes crudos devueltos por la API (hasta ~45 días)
+let REAL={cocina:[],barra:[]};  // intervalos ya calculados para la semana que se está viendo
+let selWeek=null;               // null = semana actual (auto); Date = lunes de una semana fija elegida
 const realNodes=new Map();
+const MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
 function mondayOfWeek(d=new Date()){
   const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());
   x.setDate(x.getDate()-((x.getDay()+6)%7)); // lunes=0 ... domingo=6
   return x;
 }
+function activeMonday(){return selWeek||mondayOfWeek(new Date())}
+function formatWeek(monday){
+  const sun=new Date(monday);sun.setDate(sun.getDate()+6);
+  const d1=monday.getDate(),d2=sun.getDate();
+  return monday.getMonth()===sun.getMonth()
+    ?`${d1} al ${d2} de ${MESES[monday.getMonth()]}`
+    :`${d1} de ${MESES[monday.getMonth()]} al ${d2} de ${MESES[sun.getMonth()]}`;
+}
+function buildWeekOptions(){
+  const curMon=mondayOfWeek(new Date());
+  const weeksMap=new Map([[curMon.getTime(),curMon]]);
+  ATT.forEach(r=>{
+    const ts=new Date(r.ts);if(isNaN(ts))return;
+    const m=mondayOfWeek(ts);weeksMap.set(m.getTime(),m);
+  });
+  const weeks=[...weeksMap.values()].sort((a,b)=>b-a);
+  const sel=$('#weekSel');
+  const prevValue=selWeek===null?'auto':String(selWeek.getTime());
+  sel.innerHTML=weeks.map(m=>{
+    const isCur=m.getTime()===curMon.getTime();
+    return `<option value="${isCur?'auto':m.getTime()}">${formatWeek(m)}${isCur?' (actual)':''}</option>`;
+  }).join('');
+  sel.value=[...sel.options].some(o=>o.value===prevValue)?prevValue:'auto';
+}
 function dayIndexOf(date,monday){
   const diff=Math.round((new Date(date.getFullYear(),date.getMonth(),date.getDate())-monday)/86400000);
   return diff>=0&&diff<7?diff:null;
 }
 function computeReal(){
-  const monday=mondayOfWeek(),now=new Date(),todayIdx=dayIndexOf(now,monday);
+  const monday=activeMonday(),now=new Date(),todayIdx=dayIndexOf(now,monday);
   const byKey=new Map();
   ATT.forEach(r=>{
     const ts=new Date(r.ts);if(isNaN(ts))return;
@@ -442,9 +468,10 @@ async function loadReal(){
     const r=await fetch(ATT_API);if(!r.ok)throw 0;
     ATT=await r.json()||[];
   }catch(e){toast('No se pudo actualizar el control de horario desde la nube.')}
+  buildWeekOptions();
   computeReal();
   packLanesFor('cocina');packLanesFor('barra');
-  if(mode==='real')renderReal();
+  if(mode==='real'){renderReal();updateHint()}
 }
 function renderReal(){
   const list=REAL[group]||[];
@@ -473,7 +500,7 @@ function renderReal(){
 }
 function updateHint(){
   $('#hint').textContent = mode==='real'
-    ? 'Horas reales según los marcajes de esta semana (lunes a domingo), separadas por grupo. Solo lectura — los marcajes se registran desde "Marcar horario". Un borde punteado indica un turno sin cerrar.'
+    ? `Horas reales de la semana del ${formatWeek(activeMonday())}, separadas por grupo. Solo lectura — los marcajes se registran desde "Marcar horario" (index.html). Un borde punteado indica un turno sin cerrar.`
     : editMode
       ? 'Arrastra un empleado a un día. Estira los bordes del bloque para cambiar sus horas. Para un turno partido, suelta al mismo empleado otra vez en ese día. Suelta sobre "Descanso" (arriba de cada día) para marcar que ese empleado libra ese día.'
       : 'Toca tu nombre arriba para ver solo tu horario. Toca "Todos" para volver a ver a todos.';
@@ -483,6 +510,7 @@ function setMode(m){
   document.querySelectorAll('#mode button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
   document.body.classList.toggle('attmode',m==='real');
   $('#realRefresh').style.display=m==='real'?'':'none';
+  $('#weekSel').style.display=m==='real'?'':'none';
   updateHint();
   if(m==='real'){
     nodes.forEach(n=>n.remove());nodes.clear();
@@ -497,6 +525,11 @@ $('#mode').addEventListener('click',ev=>{
   setMode(b.dataset.m);
 });
 $('#realRefresh').onclick=()=>{if(mode==='real')loadReal()};
+$('#weekSel').addEventListener('change',()=>{
+  const v=$('#weekSel').value;
+  selWeek=v==='auto'?null:new Date(+v);
+  computeReal();packLanesFor('cocina');packLanesFor('barra');renderReal();updateHint();
+});
 $('#grp').addEventListener('click',ev=>{
   const b=ev.target.closest('button');if(!b||b.dataset.g===group)return;
   setGroup(b.dataset.g);
