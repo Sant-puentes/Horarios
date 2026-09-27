@@ -93,6 +93,11 @@ body.editing .allchip{display:none}
 .blk.real .tag{position:absolute;top:2px;right:4px;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;opacity:.85}
 .compact .blk.real .tag{display:none}
 body.attmode #pal,body.attmode .rest,body.attmode #empBtn,body.attmode #clr,body.attmode .sub .lnbtn{display:none}
+.clockfab{position:fixed;left:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:30;box-shadow:0 2px 10px rgba(0,0,0,.18);background:var(--panel)}
+.clockbanner{border-radius:10px;padding:10px 12px;font-size:13px;font-weight:600;margin-top:10px}
+.clockbanner.in{background:rgba(18,144,95,.14);color:#12905f;border:1px solid rgba(18,144,95,.35)}
+.clockbanner.out{background:rgba(192,57,43,.14);color:#c0392b;border:1px solid rgba(192,57,43,.35)}
+.clockbanner.err{background:rgba(192,57,43,.1);color:#c0392b;border:1px solid rgba(192,57,43,.25);font-weight:500}
 </style>
 </head>
 <body>
@@ -100,7 +105,7 @@ body.attmode #pal,body.attmode .rest,body.attmode #empBtn,body.attmode #clr,body
   <div class="top"><h1>Horarios del personal</h1><div class="acts"><button class="clr" id="zo" aria-label="Alejar">−</button><button class="clr" id="zi" aria-label="Acercar">+</button><button class="clr" id="zf">Ver semana</button><button class="clr" id="clr">Vaciar</button></div></div>
   <div class="top" style="margin-top:6px">
     <div class="grp" id="grp"><button data-g="cocina" class="on">Cocina</button><button data-g="barra">Barra y servicio</button></div>
-    <div class="acts"><button class="clr" id="empBtn">Empleados</button><a class="clr" href="marcar.html" target="_blank" rel="noopener" style="text-decoration:none">Marcar horario ↗</a></div>
+    <div class="acts"><button class="clr" id="empBtn">Empleados</button></div>
   </div>
   <div class="top" id="modeRow" style="margin-top:6px;display:none">
     <div class="grp" id="mode"><button data-m="plan" class="on">Horario planeado</button><button data-m="real">Control de horario</button></div>
@@ -130,7 +135,19 @@ body.attmode #pal,body.attmode .rest,body.attmode #empBtn,body.attmode #clr,body
   </form>
   <div style="text-align:right;margin-top:14px"><button class="clr" id="pwdClose" type="button">Cancelar</button></div>
 </dialog>
+<dialog id="clockd">
+  <h2 style="margin:0 0 10px;font-size:15px">Marcar entrada / salida</h2>
+  <p class="hint" style="margin:0 0 10px">Escribe tu nombre tal como aparece en el sistema. La primera vez del día registra tu entrada; la siguiente, tu salida.</p>
+  <form id="clockForm" style="display:flex;gap:6px;align-items:center">
+    <input id="clockName" list="clockNames" placeholder="Tu nombre" autocomplete="off" required style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit">
+    <datalist id="clockNames"></datalist>
+    <button class="clr" type="submit">Marcar</button>
+  </form>
+  <div id="clockResult"></div>
+  <div style="text-align:right;margin-top:14px"><button class="clr" id="clockClose" type="button">Cerrar</button></div>
+</dialog>
 <button class="clr editfab" id="editBtn">Editar</button>
+<button class="clr clockfab" id="clockBtn">Marcar</button>
 <script>
 const DEFAULT_COCINA=[
   {id:'jefferson',n:'Jefferson',c:'#e2622a'},
@@ -662,6 +679,45 @@ $('#pwdForm').addEventListener('submit',ev=>{
   }
 });
 applyEditMode();
+
+/* marcar entrada/salida (integrado, sin salir de la página) */
+const clockd=$('#clockd');
+function populateClockNames(){
+  const all=[...(DATA.cocina.emp||[]),...(DATA.barra.emp||[])];
+  $('#clockNames').innerHTML=all.map(e=>`<option value="${e.n}">`).join('');
+}
+$('#clockBtn').onclick=()=>{
+  populateClockNames();
+  $('#clockName').value='';
+  $('#clockResult').innerHTML='';
+  clockd.showModal();
+  setTimeout(()=>$('#clockName').focus(),50);
+};
+$('#clockClose').onclick=()=>clockd.close();
+clockd.addEventListener('click',ev=>{if(ev.target===clockd)clockd.close()});
+$('#clockForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const name=$('#clockName').value.trim();if(!name)return;
+  const btn=ev.target.querySelector('button');
+  btn.disabled=true;
+  try{
+    const r=await fetch('/api/attendance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+    const data=await r.json();
+    if(!r.ok){
+      $('#clockResult').innerHTML=`<div class="clockbanner err">${data.error||'No se pudo registrar el marcaje.'}</div>`;
+    }else{
+      const rec=data.record,isIn=rec.type==='entrada';
+      const hora=new Date(rec.ts).toLocaleTimeString('es',{hour:'numeric',minute:'2-digit'});
+      $('#clockResult').innerHTML=`<div class="clockbanner ${isIn?'in':'out'}">${rec.name} — ${isIn?'ENTRADA':'SALIDA'} registrada a las ${hora}</div>`;
+      $('#clockName').value='';
+      if(editMode&&mode==='real')loadReal();
+    }
+  }catch(e){
+    $('#clockResult').innerHTML='<div class="clockbanner err">No se pudo conectar con el servidor. Intenta de nuevo.</div>';
+  }
+  btn.disabled=false;
+  $('#clockName').focus();
+});
 
 const ZS=[312,240,170,110,0];let zi=0;
 function zoom(i){
