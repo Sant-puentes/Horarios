@@ -593,16 +593,16 @@ ov.addEventListener('pointerdown',ev=>{
   const n=ev.target.closest('.blk');if(!n||ev.target.closest('.x'))return;
   const s=shifts.find(o=>o.id===n.sid);if(!s)return;
   ev.preventDefault();
-  const mode=ev.target.dataset.m||'m',l0=locate(ev.clientX,ev.clientY),off=l0?l0.h-s.start:0;
+  const dm=ev.target.dataset.m||'m',l0=locate(ev.clientX,ev.clientY),off=l0?l0.h-s.start:0;
   n.classList.add('drag');try{n.setPointerCapture(ev.pointerId)}catch(_){}
   track(m=>{
-    if(mode==='m'){
+    if(dm==='m'){
       const loc=locate(m.clientX,m.clientY);if(!loc)return;
       const d=s.end-s.start,a=snap(clamp(loc.h-off,S,E-d)),l=fit(s,loc.day,loc.lane,a,a+d);
       if(l>=0){s.day=loc.day;s.lane=l;s.start=a;s.end=a+d}
     }else{
       const h=snap(S+(m.clientY-ov.getBoundingClientRect().top)/HH);let a=s.start,b=s.end;
-      if(mode==='t')a=clamp(h,S,s.end-SNAP);else b=clamp(h,s.start+SNAP,E);
+      if(dm==='t')a=clamp(h,S,s.end-SNAP);else b=clamp(h,s.start+SNAP,E);
       if(free(s,a,b)){s.start=a;s.end=b}
     }
     render();
