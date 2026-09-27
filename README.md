@@ -4,7 +4,7 @@ Visor web para organizar los turnos semanales del restaurante: una planilla de l
 
 ## Uso
 
-Abre `index.html` en el navegador. No necesita instalación, servidor ni conexión a internet: todo funciona en el propio archivo (HTML + CSS + JavaScript). Los turnos se guardan en el navegador de cada dispositivo (`localStorage`) y, si `api/shifts.js` está desplegado y configurado (ver abajo), también se sincronizan en la nube para compartirse entre dispositivos.
+Al entrar al sitio (`index.html`), la primera pantalla es **HORARIOS CASAPAELLA**: un formulario para marcar la entrada o salida (solo pide el nombre) y, debajo, un botón **"Ver horarios →"** que lleva a `horarios.html`, donde está la planilla completa (y donde se entra como admin con la clave para editar). No necesita instalación, servidor ni conexión a internet para la parte de la planilla: todo funciona en el propio archivo (HTML + CSS + JavaScript). Los turnos se guardan en el navegador de cada dispositivo (`localStorage`) y, si `api/shifts.js` está desplegado y configurado (ver abajo), también se sincronizan en la nube para compartirse entre dispositivos.
 
 ## Sincronización en la nube (Vercel + Redis)
 
@@ -17,10 +17,10 @@ Con esas variables presentes, los turnos se sincronizan entre dispositivos autom
 
 ## Publicarlo en GitHub Pages
 
-1. Sube este archivo a un repositorio (puede ir directo en la raíz o dentro de una carpeta).
+1. Sube estos archivos a un repositorio (puede ir directo en la raíz o dentro de una carpeta).
 2. En el repositorio, ve a **Settings → Pages**.
-3. En **Source**, elige la rama (por ejemplo `main`) y la carpeta (`/root` o `/docs` según dónde quede `index.html`).
-4. Guarda. GitHub te da un enlace del tipo `https://tu-usuario.github.io/tu-repo/` donde queda publicada la planilla.
+3. En **Source**, elige la rama (por ejemplo `main`) y la carpeta (`/root` o `/docs` según dónde queden los archivos).
+4. Guarda. GitHub te da un enlace del tipo `https://tu-usuario.github.io/tu-repo/` donde queda publicada la app (nota: sin `api/`, la sincronización en la nube y el marcaje no funcionan en GitHub Pages — solo la planilla en modo local).
 
 ## Grupos: Cocina / Barra y servicio
 
@@ -51,10 +51,9 @@ Las dos vistas son la misma pantalla con distinto comportamiento según si está
 
 Además de la planilla de turnos *planeados*, la app registra las horas *reales* que cada empleado trabaja.
 
-- Botón flotante **"Marcar"** (abajo a la izquierda, siempre visible, sin necesitar la clave de edición) abre un diálogo en la misma página para escribir el nombre del empleado (igual a como está escrito en el sistema; hay autocompletado) y registrar el marcaje sin salir ni recargar nada. El primer marcaje del día registra la **entrada**; el siguiente marcaje de esa misma persona registra la **salida**; el que sigue vuelve a ser entrada, y así sucesivamente. La hora que se guarda es la del servidor, no la del celular que marca, para que nadie pueda adelantarla o atrasarla. El diálogo se queda abierto después de marcar (para que varias personas marquen una tras otra en el mismo dispositivo) hasta que se toque "Cerrar".
-- También existe `marcar.html`, una página aparte con la misma función (pensada como alternativa para dejarla como acceso directo en una tablet dedicada en la entrada); no es necesaria para el uso normal, que ya está integrado arriba.
+- **`index.html`** (la pantalla con la que arranca el sitio) es el formulario de marcaje: se escribe el nombre del empleado (igual a como está escrito en el sistema; hay autocompletado) y se toca "Marcar". El primer marcaje del día registra la **entrada**; el siguiente marcaje de esa misma persona registra la **salida**; el que sigue vuelve a ser entrada, y así sucesivamente. La hora que se guarda es la del servidor, no la del celular que marca, para que nadie pueda adelantarla o atrasarla. No requiere la clave de edición — cualquier empleado debe poder marcar sin ser admin.
 - Cada marcaje se guarda en Redis bajo la clave `horarios:attendance`, vía la función `api/attendance.js`, que también decide si el marcaje que llega es entrada o salida (buscando el nombre entre los empleados de Cocina y de Barra y servicio guardados en `horarios:shifts`).
-- En modo edición (admin desbloqueado), junto al selector de Cocina/Barra aparece un segundo interruptor: **Horario planeado** / **Control de horario**. Este último cambia la planilla a solo lectura y dibuja, en el mismo formato de cuadrícula, los intervalos reales de entrada-salida de la semana actual (lunes a domingo), separados por grupo. Un turno sin salida registrada se marca con borde punteado: "En curso" si es hoy, o "Sin salida" si quedó abierto un día anterior. Es intencional que solo el admin lo vea: expone las horas de entrada/salida de cada persona, información más sensible que el horario planeado.
+- Dentro de `horarios.html`, en modo edición (admin desbloqueado), junto al selector de Cocina/Barra aparece un segundo interruptor: **Horario planeado** / **Control de horario**. Este último cambia la planilla a solo lectura y dibuja, en el mismo formato de cuadrícula, los intervalos reales de entrada-salida de la semana actual (lunes a domingo), separados por grupo. Un turno sin salida registrada se marca con borde punteado: "En curso" si es hoy, o "Sin salida" si quedó abierto un día anterior. Es intencional que solo el admin lo vea: expone las horas de entrada/salida de cada persona, información más sensible que el horario planeado.
 - Es de solo lectura: no se puede arrastrar, estirar ni borrar nada ahí; para corregir un marcaje habría que hacerlo directamente en Redis (no hay UI de edición todavía).
 - Limitación conocida: por ahora solo se ve la semana en curso (sin navegación a semanas anteriores), y no se soportan turnos que cruzan la medianoche.
 
