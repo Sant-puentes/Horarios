@@ -32,6 +32,12 @@ button:disabled{opacity:.5;cursor:default}
 #scanvideo{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:12px;background:#000}
 #scanbox button{background:var(--bg);color:var(--ink);border:1px solid var(--line);margin-top:8px}
 .scanok{background:rgba(18,144,95,.14);color:var(--in);border:1px solid rgba(18,144,95,.35);border-radius:10px;padding:10px 12px;font-size:13px;font-weight:600;margin:0 0 14px}
+details.reg{margin:0 0 14px;text-align:left;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13.5px}
+details.reg summary{cursor:pointer;font-weight:600;color:var(--mut)}
+details.reg .row{display:flex;gap:8px;margin-top:10px}
+details.reg input{text-transform:uppercase;letter-spacing:.12em;padding:10px;font-size:16px}
+details.reg button{margin:0;width:auto;padding:10px 14px;font-size:15px}
+#regmsg{margin:8px 0 0;font-size:13px;font-weight:600}
 a.goto{display:block;width:100%;box-sizing:border-box;padding:13px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:14.5px;font-weight:600;text-decoration:none}
 </style>
 </head>
@@ -54,6 +60,12 @@ a.goto{display:block;width:100%;box-sizing:border-box;padding:13px;border-radius
     <button id="btn" type="submit">Marcar</button>
   </form>
   <div id="result"></div>
+  <details class="reg" id="regbox">
+    <summary>Registrar este celular</summary>
+    <p class="hint" style="margin:8px 0 0">Solo la primera vez: pídele al administrador tu código y escríbelo aquí. Después solo tú podrás marcar con tu nombre desde este celular.</p>
+    <div class="row"><input id="regcode" placeholder="CÓDIGO" autocomplete="off" autocapitalize="characters" maxlength="12"><button type="button" id="regbtn">Registrar</button></div>
+    <p id="regmsg"></p>
+  </details>
   <hr class="sep">
   <a class="goto" href="horarios.html">Ver horarios →</a>
 </div>
@@ -61,6 +73,19 @@ a.goto{display:block;width:100%;box-sizing:border-box;padding:13px;border-radius
 // Código del QR del local, tomado del link escaneado. A propósito NO se guarda en
 // localStorage/sessionStorage: así hay que volver a escanear el QR cada vez que se marca.
 let LOC=new URLSearchParams(location.search).get('loc')||'';
+// Código aleatorio de este celular: identifica el dispositivo (no a la persona) para que solo
+// el empleado registrado aquí pueda marcar con su nombre. Ver api/devices.js.
+const DEV_LS='horarios:device';
+function deviceId(){
+  try{
+    let d=localStorage.getItem(DEV_LS);
+    if(!d||d.length<16){
+      d=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');
+      localStorage.setItem(DEV_LS,d);
+    }
+    return d;
+  }catch(e){return window._devMem||(window._devMem=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join(''));}
+}
 const $=s=>document.querySelector(s),f=$('#f'),input=$('#name'),btn=$('#btn'),result=$('#result'),names=$('#names');
 
 const setLoc=v=>{
@@ -120,6 +145,27 @@ fetch('/api/shifts').then(r=>r.ok?r.json():null).then(d=>{
   names.innerHTML=all.map(e=>`<option value="${e.n}">`).join('');
 }).catch(()=>{});
 
+// Registro del celular con el código que da el admin (también llega por link: ?reg=CODIGO).
+const regmsg=$('#regmsg');
+async function registerDevice(){
+  const code=$('#regcode').value.trim();if(!code)return;
+  const b=$('#regbtn');b.disabled=true;regmsg.style.color='var(--mut)';regmsg.textContent='Registrando…';
+  try{
+    const r=await fetch('/api/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'register',code,device:deviceId()})});
+    const d=await r.json();
+    if(!r.ok){regmsg.style.color='var(--out)';regmsg.textContent=d.error||'No se pudo registrar.';}
+    else{
+      regmsg.style.color='var(--in)';regmsg.textContent='✓ Celular registrado a nombre de '+d.name+'.';
+      $('#regcode').value='';
+      const u=new URL(location.href);u.searchParams.delete('reg');history.replaceState(null,'',u.pathname+u.search);
+    }
+  }catch(e){regmsg.style.color='var(--out)';regmsg.textContent='No se pudo conectar con el servidor.';}
+  b.disabled=false;
+}
+$('#regbtn').addEventListener('click',registerDevice);
+$('#regcode').addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();registerDevice();}});
+{const c=new URLSearchParams(location.search).get('reg');if(c){$('#regcode').value=c;$('#regbox').open=true;}}
+
 const fmt=iso=>new Date(iso).toLocaleTimeString('es',{hour:'numeric',minute:'2-digit'});
 
 f.addEventListener('submit',async ev=>{
@@ -127,7 +173,7 @@ f.addEventListener('submit',async ev=>{
   const name=input.value.trim();if(!name)return;
   btn.disabled=true;btn.textContent='Marcando…';
   try{
-    const r=await fetch('/api/attendance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,loc:LOC})});
+    const r=await fetch('/api/attendance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,loc:LOC,device:deviceId()})});
     const data=await r.json();
     if(!r.ok){
       result.innerHTML=`<div class="banner err">${data.error||'No se pudo registrar el marcaje.'}</div>`;

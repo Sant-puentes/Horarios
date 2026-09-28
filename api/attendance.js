@@ -7,7 +7,10 @@
 // alguien adelante/atrase su hora real).
 //
 // GET  /api/attendance         -> devuelve el arreglo completo de marcajes.
-// POST /api/attendance {name, loc} -> `loc` es el código del QR del local
+// POST /api/attendance {name, loc, device} -> `device` es el código aleatorio del celular
+//   (ver api/devices.js): si el empleado ya tiene un celular registrado, solo se deja marcar
+//   desde ese celular; y un celular registrado solo puede marcar a su dueño. Los empleados
+//   sin celular registrado siguen marcando como antes (transición). `loc` es el código del QR del local
 //   (ver api/location.js); si el admin ya generó uno, es obligatorio. Busca un empleado (en Cocina o en Barra y
 //   servicio, leyendo el roster actual desde "horarios:shifts") cuyo nombre
 //   coincida con `name` (sin distinguir mayúsculas ni acentos). Si lo
@@ -29,7 +32,9 @@ const REDIS_URL = process.env.HORARIOS_KV_REST_API_URL;
 const REDIS_TOKEN = process.env.HORARIOS_KV_REST_API_TOKEN;
 const KEY = 'horarios:attendance';
 const ROSTER_KEY = 'horarios:shifts';
+const DEV_KEY = 'horarios:devices';   // celulares registrados por empleado (ver api/devices.js)
 const LOC_KEY = 'horarios:location'; // código del QR físico del local (ver api/location.js)
+const crypto = require('crypto');
 const MAX_AGE_DAYS = 45; // se podan marcajes más viejos que esto en cada escritura
 
 function normalize(s) {
@@ -117,6 +122,26 @@ module.exports = async (req, res) => {
       if (!found) {
         res.status(404).json({
           error: 'No encontramos a nadie con ese nombre. Verifica cómo está escrito en el sistema (pregunta al administrador).'
+        });
+        return;
+      }
+
+      // Identidad: celular registrado <-> empleado (ver api/devices.js).
+      const devs = await redisGet(DEV_KEY);
+      const bindings = (devs && devs.bindings) || {};
+      const empKey = found.group + ':' + found.emp.id;
+      const dh = typeof body.device === 'string' && body.device.length >= 16 && body.device.length <= 128
+        ? crypto.createHash('sha256').update(body.device).digest('hex') : '';
+      if (bindings[empKey]) {
+        if (!dh || bindings[empKey].hash !== dh) {
+          res.status(403).json({
+            error: 'Este nombre está registrado en otro celular. Si cambiaste de celular, pídele un código nuevo al administrador.'
+          });
+          return;
+        }
+      } else if (dh && Object.keys(bindings).some(k => bindings[k].hash === dh)) {
+        res.status(403).json({
+          error: 'Este celular está registrado a nombre de otra persona. Solo puedes marcar con tu propio nombre.'
         });
         return;
       }

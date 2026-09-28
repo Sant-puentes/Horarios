@@ -13,7 +13,7 @@
   <div class="top"><h1>Horarios del personal</h1><div class="acts"><button class="clr" id="zo" aria-label="Alejar">−</button><button class="clr" id="zi" aria-label="Acercar">+</button><button class="clr" id="zf">Ver semana</button><button class="clr" id="clr">Vaciar</button></div></div>
   <div class="top" style="margin-top:6px">
     <div class="grp" id="grp"><button data-g="cocina" class="on">Cocina</button><button data-g="barra">Barra y servicio</button></div>
-    <div class="acts"><button class="clr" id="empBtn">Empleados</button><button class="clr" id="locBtn">QR del local</button></div>
+    <div class="acts"><button class="clr" id="empBtn">Empleados</button><button class="clr" id="locBtn">QR del local</button><button class="clr" id="devBtn">Celulares</button></div>
   </div>
   <div class="top" id="modeRow" style="margin-top:6px;display:none">
     <div class="grp" id="mode"><button data-m="plan" class="on">Horario planeado</button><button data-m="real">Control de horario</button></div>
@@ -43,6 +43,18 @@
     <button class="clr" id="locRegen" type="button">Regenerar código</button>
     <span><button class="clr" id="locPrint" type="button">Imprimir</button> <button class="clr" id="locClose" type="button">Cerrar</button></span>
   </div>
+</dialog>
+<dialog id="devd">
+  <h2 style="margin:0 0 6px;font-size:15px">Celulares de los empleados</h2>
+  <p class="hint" style="margin:0 0 10px">Para que nadie marque con el nombre de otro: toca <b>Código</b> junto a un empleado y dáselo (o que escanee el QR con su celular). Al canjearlo, ese celular queda ligado a ese nombre. El código sirve una vez y vence en 24 h. Si alguien cambia de celular, genera un código nuevo. Quien no tenga celular registrado sigue marcando como antes.</p>
+  <div id="devList"></div>
+  <div id="devShow" style="display:none;text-align:center;margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:10px">
+    <div id="devShowName" style="font-weight:700"></div>
+    <div id="devShowCode" style="font-size:26px;font-weight:800;letter-spacing:.12em;margin:6px 0"></div>
+    <div id="devShowQr" style="display:flex;justify-content:center;background:#fff;padding:10px;border-radius:10px"></div>
+    <p class="hint" id="devShowUrl" style="word-break:break-all;margin:8px 0 0;font-size:11px"></p>
+  </div>
+  <div style="text-align:right;margin-top:14px"><button class="clr" id="devClose" type="button">Cerrar</button></div>
 </dialog>
 <dialog id="pwd">
   <h2 style="margin:0 0 10px;font-size:15px">Modo edición</h2>

@@ -18,6 +18,7 @@ vendor/jsqr.min.js     → lector de QR jsQR (Apache-2.0), solo la usa index.htm
 api/shifts.js          → guarda/lee el horario planeado en Redis
 api/attendance.js      → guarda/lee los marcajes de entrada/salida
 api/location.js        → guarda el código secreto del QR del local
+api/devices.js         → registro de celulares por empleado (anti-suplantación)
 CONTEXTO.md            → mapa corto del proyecto, pensado para pegar al abrir un chat nuevo
 ```
 
@@ -75,6 +76,17 @@ Además de la planilla de turnos *planeados*, la app registra las horas *reales*
 - Es de solo lectura: no se puede arrastrar, estirar ni borrar nada ahí; para corregir un marcaje habría que hacerlo directamente en Redis (no hay UI de edición todavía).
 - Limitación conocida: los marcajes se podan automáticamente a los 45 días (ver `api/attendance.js`), así que el selector no llega a mostrar semanas más viejas que eso; tampoco se soportan turnos que cruzan la medianoche.
 
+## Celular registrado por empleado (anti-suplantación)
+
+Para que un compañero no pueda marcar con el nombre de otro, cada empleado registra **su celular** una sola vez:
+
+- **Qué es el "ID del celular":** un código aleatorio que `index.html` genera y guarda en `localStorage` del navegador (la web no puede leer el IMEI ni nada del hardware). Al servidor solo llega su hash SHA-256 y se guarda en Redis (`horarios:devices`) ligado a un empleado.
+- **Cómo se registra (lo aprueba el admin):** en `horarios.html`, con la edición desbloqueada, el botón **Celulares** lista a todos los empleados; **Código** genera un código de un solo uso (8 caracteres, vence en 24 h) con su QR y link (`index.html?reg=CODIGO`). El empleado lo canjea en su propio celular, ya sea escribiéndolo en "Registrar este celular" o escaneando el QR con su cámara.
+- **Qué se exige al marcar:** si el empleado tiene celular registrado, solo puede marcar desde ese celular. Y un celular registrado solo puede marcar a su dueño (no a otros). Si no coincide, el servidor responde 403.
+- **Cambio de celular:** el admin genera un **Código** nuevo y el empleado lo canjea en el celular nuevo; el celular anterior deja de funcionar. **Restablecer** borra el vínculo (ese empleado vuelve a marcar sin restricción hasta registrar otro celular).
+- **Transición:** los empleados sin celular registrado siguen marcando como antes (solo QR del local + nombre), así que hay que registrar a todos para que la protección sea completa. Al quitar un empleado en "Empleados", su vínculo también se borra.
+- **Límites:** si se borran los datos del navegador, se usa modo incógnito u otro navegador en el mismo celular, se pierde el ID y hay que pedir un código nuevo. Si un empleado presta su celular a otro, no se detecta. El código de registro no tiene límite de intentos (8 caracteres sobre 31 posibles, válido 24 h).
+
 ## Nombres visibles en Cocina y en Barra y servicio
 
 Cuando los bloques de turno quedan muy angostos, la planilla pasa al "modo de letras" (solo la inicial del empleado). Como Barra y servicio tiene más columnas por día (3+3) que Cocina (3+2), en algunas pantallas de laptop (≈1300–1550 px) Cocina mostraba nombre y horario y Barra solo letras. Ahora, en pantallas de 700 px o más, cada columna mide como mínimo `MIN_LANE` (37 px) en cualquier nivel de zoom, así que ambos grupos muestran nombre y horas; si no cabe, la planilla se desplaza en horizontal. En celular (menos de 700 px) se mantiene el modo de letras para que la semana entre completa. Al añadir o quitar columnas con +/− el modo se recalcula.
@@ -93,7 +105,7 @@ Para que nadie pueda marcar entrada o salida desde su casa, el marcaje exige hab
 - **Cómo lo genera el admin:** en `horarios.html`, con la edición desbloqueada, el botón **QR del local** muestra el QR (con el link debajo), permite **Imprimir** una hoja lista para pegar, y **Regenerar código** (invalida el QR impreso anterior; hay que reimprimirlo. Útil si alguien le toma foto y lo comparte fuera del local).
 - **Backend:** `api/location.js` guarda el código en Redis (`horarios:location`) y exige la clave de edición incluso para leerlo (si fuera público, cualquiera armaría el link sin ir al local). `api/attendance.js` compara el código recibido con el guardado.
 - **Transición:** mientras el admin no haya generado el QR por primera vez (abrir el botón "QR del local" lo crea), el marcaje sigue funcionando como antes, sin exigir código.
-- **Qué NO resuelve:** el QR prueba que *alguien* estaba en el local, no *quién*. Un compañero presente aún podría escribir el nombre de otro que no llegó, y quien tenga el link (por ejemplo, una foto del QR) puede usarlo hasta que se regenere. Por ahora se decidió identificar solo por nombre; si más adelante hace falta, la siguiente capa natural es un PIN corto por empleado.
+- **Qué NO resuelve:** el QR prueba que *alguien* estaba en el local, no *quién*. Un compañero presente aún podría escribir el nombre de otro que no llegó, y quien tenga el link (por ejemplo, una foto del QR) puede usarlo hasta que se regenere. La suplantación por nombre se cubre con el registro de celular por empleado (sección siguiente).
 - El QR se dibuja en el navegador con la librería `qrcode-generator` (MIT, Kazuhiko Arase), servida desde `vendor/qrcode.min.js`, sin depender de servicios externos.
 
 ## Subcarriles por categoría (Cocina/Producción, Barra/Servicio)

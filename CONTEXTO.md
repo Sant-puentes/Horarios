@@ -18,6 +18,7 @@ App de horarios de personal para un restaurante (Cocina / Barra y servicio), con
 | `vendor/qrcode.min.js` | Librería `qrcode-generator` (Kazuhiko Arase, MIT) minificada. Solo genera el QR del panel admin; no se toca casi nunca. |
 | `api/shifts.js` | GET/POST del horario planeado (`horarios:shifts` en Redis). POST exige header `x-edit-key`. |
 | `api/attendance.js` | POST registra marcaje (alterna entrada/salida por empleado); exige `loc` si ya hay QR de local configurado. GET público, devuelve el historial (≤45 días). |
+| `api/devices.js` | Registro de celulares por empleado (`horarios:devices`): el admin genera códigos de un solo uso (GET/`invite`/`reset` exigen `x-edit-key`); el empleado los canjea (`register`, público). `api/attendance.js` exige que el celular (`device`) coincida con el registrado. Panel: botón "Celulares" en `horarios.html`. |
 | `api/location.js` | Token secreto del QR del local (`horarios:location`). GET y POST exigen `x-edit-key` (nunca es público, si no cualquiera arma el link sin ir al local). |
 | `CONTEXTO.md` | Este archivo. |
 | `README.md` | Documentación completa, una sección por función. |
@@ -27,7 +28,7 @@ App de horarios de personal para un restaurante (Cocina / Barra y servicio), con
 - **Clave de edición**: `1111`, hardcodeada como `EDIT_PASSWORD` en `assets/horarios.js` y como `EDIT_KEY` en cada `api/*.js`. No es seguridad real, solo un candado simple.
 - **Dos grupos independientes**: Cocina y Barra y servicio, cada uno con su propio roster, turnos, descansos y carriles por día (ajustables con botones +/−, `DATA[g].lanes[day]`).
 - **`horarios.html` tiene 3 modos**: solo lectura (público, filtra por empleado), edición (admin, drag&drop), y "Control de horario" (admin, solo lectura, horas reales por semana con selector de semana).
-- **El QR del local prueba presencia, no identidad**: cualquiera físicamente ahí puede escribir el nombre de otro. Deliberado, el usuario lo pidió así.
+- **El QR del local prueba presencia, no identidad**: cualquiera físicamente ahí puede escribir el nombre de otro. Se complementa con el registro de celular por empleado (`api/devices.js`), que evita que se marque con el nombre de otro; empleados sin celular registrado siguen marcando solo por nombre (transición).
 - **Nunca asumas que el repo está como lo dejaste**: el usuario y otras sesiones/herramientas editan directamente en GitHub. Siempre `git fetch origin main` + revisar `git log` antes de tocar nada, y `git rebase FETCH_HEAD` si hay commits nuevos.
 - **Validar sin navegador real cuando alcance**: `node --check` para sintaxis. Para probar interacción de verdad hay Playwright instalado (Chromium real) — más confiable que jsdom para temas de layout/CSS (fue necesario para el bug de Barra vs Cocina).
 

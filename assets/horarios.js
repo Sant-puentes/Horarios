@@ -545,6 +545,7 @@ $('#empList').addEventListener('click',ev=>{
   for(let i=shifts.length-1;i>=0;i--)if(shifts[i].emp===id)shifts.splice(i,1);
   for(let i=rests.length-1;i>=0;i--)if(rests[i].emp===id)rests.splice(i,1);
   save();buildPalette();render();renderRests();renderEmpList();
+  devFetch('POST',{action:'reset',key:group+':'+id}).catch(()=>{});
 });
 $('#empForm').addEventListener('submit',ev=>{
   ev.preventDefault();
@@ -628,6 +629,61 @@ $('#locPrint').onclick=()=>{
 };
 $('#locClose').onclick=()=>locd.close();
 locd.addEventListener('click',ev=>{if(ev.target===locd)locd.close()});
+
+/* Celulares registrados por empleado (ver api/devices.js) */
+const devd=$('#devd');
+let devState={devices:{},invites:{}};
+const escH=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function devFetch(method,body){
+  const r=await fetch('/api/devices',{method,headers:{'x-edit-key':EDIT_PASSWORD,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  if(!r.ok)throw new Error('http '+r.status);
+  return r.json();
+}
+function devEmps(){return ['cocina','barra'].flatMap(g=>(DATA[g].emp||[]).map(e=>({key:g+':'+e.id,g,e})))}
+function devRender(){
+  $('#devList').innerHTML=devEmps().map(({key,g,e})=>{
+    const d=devState.devices[key],inv=devState.invites[key];
+    const st=d?'✓ Celular registrado':inv?'Código pendiente':'Sin registrar';
+    return `<div class="emprow"><span class="dot" style="background:${e.c}"></span><span>${escH(e.n)}<small class="hint" style="display:block;font-weight:400">${g==='cocina'?'Cocina':'Barra y servicio'} · ${st}</small></span><button class="clr" type="button" data-a="inv" data-k="${escH(key)}">Código</button>${d||inv?`<button class="clr rm" type="button" data-a="rst" data-k="${escH(key)}">Restablecer</button>`:''}</div>`;
+  }).join('')||'<p class="hint">No hay empleados.</p>';
+}
+function devShowCode(key,code){
+  const e=devEmps().find(x=>x.key===key);
+  const url=location.origin+'/index.html?reg='+encodeURIComponent(code);
+  const q=qrcode(0,'M');q.addData(url);q.make();
+  $('#devShowName').textContent=e?e.e.n:'';
+  $('#devShowCode').textContent=code.slice(0,4)+'-'+code.slice(4);
+  $('#devShowQr').innerHTML=q.createSvgTag({cellSize:5,margin:0,scalable:true});
+  const svg=$('#devShowQr svg');if(svg){svg.style.width='min(200px,60vw)';svg.style.height='auto'}
+  $('#devShowUrl').textContent=url;
+  $('#devShow').style.display='';
+}
+async function devLoad(){
+  try{devState=await devFetch('GET');devRender()}
+  catch(e){$('#devList').innerHTML='<span class="hint">No se pudo cargar. ¿Está desplegada la API y configurado Redis?</span>'}
+}
+$('#devBtn').onclick=()=>{
+  if(!editMode)return;
+  $('#devShow').style.display='none';$('#devList').innerHTML='<span class="hint">Cargando…</span>';
+  devd.showModal();devLoad();
+};
+$('#devList').addEventListener('click',async ev=>{
+  if(!editMode)return;
+  const b=ev.target.closest('button[data-a]');if(!b)return;
+  const key=b.dataset.k,e=devEmps().find(x=>x.key===key);if(!e)return;
+  try{
+    if(b.dataset.a==='inv'){
+      const r=await devFetch('POST',{action:'invite',key,name:e.e.n});
+      devState.invites[key]={code:r.code,exp:r.exp};devRender();devShowCode(key,r.code);
+    }else{
+      if(!confirm(`¿Restablecer el celular de ${e.e.n}? Podrá marcar como antes hasta que registre otro.`))return;
+      await devFetch('POST',{action:'reset',key});
+      delete devState.devices[key];delete devState.invites[key];devRender();$('#devShow').style.display='none';
+    }
+  }catch(err){toast('No se pudo completar la acción.')}
+});
+$('#devClose').onclick=()=>devd.close();
+devd.addEventListener('click',ev=>{if(ev.target===devd)devd.close()});
 
 const ZS=[312,240,170,110,0];let zi=0;
 const MIN_LANE=37; // px mínimos por carril para que se lea nombre + horario (por debajo de 36 se pasa a letras)
