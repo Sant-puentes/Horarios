@@ -27,6 +27,11 @@ button:disabled{opacity:.5;cursor:default}
 @keyframes pop{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
 .scanwarn{background:rgba(192,57,43,.1);color:var(--out);border:1px solid rgba(192,57,43,.25);border-radius:10px;padding:10px 12px;font-size:13px;font-weight:600;margin:0 0 14px}
 .sep{border:0;border-top:1px solid var(--line);margin:22px 0 18px}
+.scanbtn{background:var(--in);color:#fff;margin:0 0 14px}
+#scanbox{margin:0 0 14px}
+#scanvideo{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:12px;background:#000}
+#scanbox button{background:var(--bg);color:var(--ink);border:1px solid var(--line);margin-top:8px}
+.scanok{background:rgba(18,144,95,.14);color:var(--in);border:1px solid rgba(18,144,95,.35);border-radius:10px;padding:10px 12px;font-size:13px;font-weight:600;margin:0 0 14px}
 a.goto{display:block;width:100%;box-sizing:border-box;padding:13px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:14.5px;font-weight:600;text-decoration:none}
 </style>
 </head>
@@ -34,7 +39,15 @@ a.goto{display:block;width:100%;box-sizing:border-box;padding:13px;border-radius
 <div class="card">
   <h1>HORARIOS CASAPAELLA</h1>
   <p class="hint">Escribe tu nombre tal como aparece en el sistema y toca "Marcar". La primera vez del día registra tu entrada; la siguiente, tu salida.</p>
-  <p class="scanwarn" id="scanwarn" style="display:none">📷 Para marcar, escanea el QR pegado en el local con la cámara de tu celular.</p>
+  <div id="scanarea" style="display:none">
+    <p class="scanwarn" id="scanwarn">📷 Para marcar, escanea el QR pegado en el local.</p>
+    <button type="button" id="scanbtn" class="scanbtn">Escanear QR del local</button>
+    <div id="scanbox" style="display:none">
+      <video id="scanvideo" playsinline muted></video>
+      <button type="button" id="scancancel">Cancelar</button>
+    </div>
+  </div>
+  <p class="scanok" id="scanok" style="display:none">✓ Local verificado</p>
   <form id="f">
     <input id="name" list="names" placeholder="Tu nombre" autocomplete="off" autofocus required>
     <datalist id="names"></datalist>
@@ -47,10 +60,60 @@ a.goto{display:block;width:100%;box-sizing:border-box;padding:13px;border-radius
 <script>
 // Código del QR del local, tomado del link escaneado. A propósito NO se guarda en
 // localStorage/sessionStorage: así hay que volver a escanear el QR cada vez que se marca.
-const LOC=new URLSearchParams(location.search).get('loc')||'';
+let LOC=new URLSearchParams(location.search).get('loc')||'';
 const $=s=>document.querySelector(s),f=$('#f'),input=$('#name'),btn=$('#btn'),result=$('#result'),names=$('#names');
 
-if(!LOC)$('#scanwarn').style.display='';
+const setLoc=v=>{
+  LOC=v;
+  $('#scanok').style.display=LOC?'':'none';
+  $('#scanarea').style.display=LOC?'none':'';
+  if(!LOC)$('#scanwarn').style.display='';
+};
+setLoc(LOC);
+
+// Escáner de QR dentro de la página (BarcodeDetector si existe; si no, jsQR cargado bajo demanda).
+let stream=null,scanning=false;
+const extractLoc=t=>{try{return new URL(t).searchParams.get('loc')||'';}catch(e){return '';}};
+const loadJsQR=()=>window.jsQR?Promise.resolve():new Promise((ok,ko)=>{
+  const sc=document.createElement('script');sc.src='vendor/jsqr.min.js';sc.onload=ok;sc.onerror=ko;document.head.appendChild(sc);
+});
+function stopScan(){
+  scanning=false;
+  if(stream)stream.getTracks().forEach(t=>t.stop());
+  stream=null;$('#scanbox').style.display='none';$('#scanbtn').style.display='';
+}
+async function startScan(){
+  const warn=$('#scanwarn');
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){warn.textContent='Este navegador no permite abrir la cámara. Escanea el QR con la cámara normal del celular.';return;}
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+  }catch(e){warn.textContent='No se pudo abrir la cámara. Permite el acceso a la cámara o escanea el QR con la cámara normal del celular.';return;}
+  const detector='BarcodeDetector' in window?new BarcodeDetector({formats:['qr_code']}):null;
+  if(!detector){try{await loadJsQR();}catch(e){stopScan();warn.textContent='No se pudo cargar el lector de QR. Escanea con la cámara normal del celular.';return;}}
+  const video=$('#scanvideo');video.srcObject=stream;await video.play();
+  $('#scanbox').style.display='';$('#scanbtn').style.display='none';warn.textContent='Apunta la cámara al QR del local.';
+  scanning=true;
+  const cv=document.createElement('canvas'),cx=cv.getContext('2d',{willReadFrequently:true});
+  const tick=async()=>{
+    if(!scanning)return;
+    if(video.readyState>=2){
+      let text='';
+      if(detector){const r=await detector.detect(video).catch(()=>[]);if(r[0])text=r[0].rawValue;}
+      else{
+        cv.width=video.videoWidth;cv.height=video.videoHeight;cx.drawImage(video,0,0);
+        const img=cx.getImageData(0,0,cv.width,cv.height),r=window.jsQR(img.data,img.width,img.height);
+        if(r)text=r.data;
+      }
+      const code=extractLoc(text);
+      if(code){stopScan();setLoc(code);input.focus();return;}
+    }
+    requestAnimationFrame(tick);
+  };
+  tick();
+}
+$('#scanbtn').addEventListener('click',startScan);
+$('#scancancel').addEventListener('click',()=>{stopScan();$('#scanwarn').textContent='📷 Para marcar, escanea el QR pegado en el local.';});
+
 fetch('/api/shifts').then(r=>r.ok?r.json():null).then(d=>{
   if(!d)return;
   const all=[...(d.cocina&&d.cocina.emp||[]),...(d.barra&&d.barra.emp||[])];
@@ -72,6 +135,8 @@ f.addEventListener('submit',async ev=>{
       const rec=data.record,isIn=rec.type==='entrada';
       result.innerHTML=`<div class="banner ${isIn?'in':'out'}">${rec.name} — ${isIn?'ENTRADA':'SALIDA'} registrada<small>${fmt(rec.ts)}</small></div>`;
       input.value='';
+      // Hay que escanear el QR de nuevo para el próximo marcaje (y un reload tampoco lo conserva).
+      history.replaceState(null,'',location.pathname);setLoc('');
     }
   }catch(e){
     result.innerHTML='<div class="banner err">No se pudo conectar con el servidor. Intenta de nuevo.</div>';

@@ -10,10 +10,11 @@ App de horarios de personal para un restaurante (Cocina / Barra y servicio), con
 
 | Archivo | Qué es |
 |---|---|
-| `index.html` | Pantalla de bienvenida: título, marcar entrada/salida (solo nombre), botón "Ver horarios →". Público, sin clave. Un solo archivo, autosuficiente (no se separó, es chico). |
+| `index.html` | Pantalla de bienvenida: título, marcar entrada/salida (solo nombre), botón "Ver horarios →". Público, sin clave. Incluye escáner de QR con cámara (`#scanbtn`, `startScan()`); el código `loc` vive solo en memoria y se borra tras marcar. Un solo archivo (salvo jsQR bajo demanda). |
 | `horarios.html` | Cascarón HTML de la planilla + panel admin: estructura y `<dialog>`s. Carga `assets/horarios.css`, `vendor/qrcode.min.js` y `assets/horarios.js`, en ese orden. |
 | `assets/horarios.css` | Todo el CSS de `horarios.html` (variables de tema, grilla, bloques, modo compacto, etc). |
 | `assets/horarios.js` | Todo el JS de `horarios.html`: datos, drag&drop, Control de horario, candado de edición, QR del local, reparación de carriles. |
+| `vendor/jsqr.min.js` | Librería jsQR (Apache-2.0). `index.html` la carga solo si el navegador no tiene `BarcodeDetector` (iPhone). |
 | `vendor/qrcode.min.js` | Librería `qrcode-generator` (Kazuhiko Arase, MIT) minificada. Solo genera el QR del panel admin; no se toca casi nunca. |
 | `api/shifts.js` | GET/POST del horario planeado (`horarios:shifts` en Redis). POST exige header `x-edit-key`. |
 | `api/attendance.js` | POST registra marcaje (alterna entrada/salida por empleado); exige `loc` si ya hay QR de local configurado. GET público, devuelve el historial (≤45 días). |

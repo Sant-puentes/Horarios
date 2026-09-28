@@ -14,6 +14,7 @@ horarios.html          → cascarón HTML de la planilla + panel admin
 assets/horarios.css    → CSS de horarios.html
 assets/horarios.js     → JS de horarios.html (datos, drag&drop, Control de horario, QR del local, etc.)
 vendor/qrcode.min.js   → librería de generación de QR (MIT), solo la usa horarios.html
+vendor/jsqr.min.js     → lector de QR jsQR (Apache-2.0), solo la usa index.html como respaldo (iPhone/Safari)
 api/shifts.js          → guarda/lee el horario planeado en Redis
 api/attendance.js      → guarda/lee los marcajes de entrada/salida
 api/location.js        → guarda el código secreto del QR del local
@@ -87,7 +88,8 @@ Si un turno queda guardado con un carril que ya no existe ese día (por ejemplo 
 Para que nadie pueda marcar entrada o salida desde su casa, el marcaje exige haber escaneado un **QR físico pegado en el local**:
 
 - **Cómo se usa:** el empleado escanea el QR con la cámara normal de su celular; eso abre `index.html?loc=<código>` y ya puede escribir su nombre y marcar. Si abre la página sin escanear (por marcador, escribiendo la dirección, etc.), aparece el aviso *"escanea el QR pegado en el local"* y el servidor rechaza el marcaje (403).
-- **Hay que escanear cada vez:** el código viaja solo en la URL y a propósito **no se guarda** en el navegador, así que no sirve guardar el link para marcar después desde otro lado.
+- **Escáner dentro de la página:** `index.html` tiene el botón **Escanear QR del local**, que abre la cámara trasera y lee el QR sin salir de la web (necesita HTTPS y permiso de cámara). Usa `BarcodeDetector` si el navegador lo trae (Chrome/Android) y, si no, carga `vendor/jsqr.min.js` bajo demanda (iPhone/Safari). Si la cámara falla, el aviso sugiere escanear con la cámara normal del celular, que sigue funcionando (`?loc=`).
+- **Hay que escanear cada vez:** el código viaja solo en la URL y a propósito **no se guarda** en el navegador, así que no sirve guardar el link para marcar después desde otro lado. Tras cada marcaje exitoso el código se borra de memoria y de la URL, y hay que volver a escanear.
 - **Cómo lo genera el admin:** en `horarios.html`, con la edición desbloqueada, el botón **QR del local** muestra el QR (con el link debajo), permite **Imprimir** una hoja lista para pegar, y **Regenerar código** (invalida el QR impreso anterior; hay que reimprimirlo. Útil si alguien le toma foto y lo comparte fuera del local).
 - **Backend:** `api/location.js` guarda el código en Redis (`horarios:location`) y exige la clave de edición incluso para leerlo (si fuera público, cualquiera armaría el link sin ir al local). `api/attendance.js` compara el código recibido con el guardado.
 - **Transición:** mientras el admin no haya generado el QR por primera vez (abrir el botón "QR del local" lo crea), el marcaje sigue funcionando como antes, sin exigir código.
