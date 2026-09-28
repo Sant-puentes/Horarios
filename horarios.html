@@ -401,7 +401,7 @@ function adjustLane(day,catIdx,delta){
     shifts.forEach(s=>{if(s.day===day&&s.lane>=insertAt)s.lane++});
   }
   cat.n=newN;
-  applyGroupLayout(group);save();render();
+  applyGroupLayout(group);save();render();zoom(zi);
 }
 grid.addEventListener('click',ev=>{
   if(!editMode||mode!=='plan')return;
@@ -780,8 +780,16 @@ $('#locClose').onclick=()=>locd.close();
 locd.addEventListener('click',ev=>{if(ev.target===locd)locd.close()});
 
 const ZS=[312,240,170,110,0];let zi=0;
+const MIN_LANE=37; // px mínimos por carril para que se lea nombre + horario (por debajo de 36 se pasa a letras)
 function zoom(i){
-  zi=clamp(i,0,ZS.length-1);grid.style.setProperty('--cw',ZS[zi]+'px');grid.style.minWidth=ZS[zi]?'max-content':'0';
+  zi=clamp(i,0,ZS.length-1);
+  let cw=ZS[zi];
+  // En pantallas medianas y grandes cada carril mide al menos MIN_LANE px (0 = "Ver semana", ajustar a la pantalla).
+  // Sin este piso, un grupo con más carriles por día (Barra: 3+3=6) caía al modo de letras en pantallas donde el
+  // otro (Cocina: 3+2=5) todavía mostraba nombres. Si no cabe, la planilla se desplaza en horizontal.
+  // En pantallas angostas (celular) se mantiene el ajuste total con letras.
+  if(window.innerWidth>=700)cw=Math.max(cw,maxDayTotal(group)*MIN_LANE);
+  grid.style.setProperty('--cw',cw+'px');grid.style.minWidth=cw?'max-content':'0';
   requestAnimationFrame(()=>grid.classList.toggle('compact',ov.clientWidth/(7*maxDayTotal(group))<36));
 }
 $('#zo').onclick=()=>zoom(zi+1);$('#zi').onclick=()=>zoom(zi-1);$('#zf').onclick=()=>zoom(zi===ZS.length-1?0:ZS.length-1);

@@ -58,6 +58,10 @@ Además de la planilla de turnos *planeados*, la app registra las horas *reales*
 - Es de solo lectura: no se puede arrastrar, estirar ni borrar nada ahí; para corregir un marcaje habría que hacerlo directamente en Redis (no hay UI de edición todavía).
 - Limitación conocida: los marcajes se podan automáticamente a los 45 días (ver `api/attendance.js`), así que el selector no llega a mostrar semanas más viejas que eso; tampoco se soportan turnos que cruzan la medianoche.
 
+## Nombres visibles en Cocina y en Barra y servicio
+
+Cuando los bloques de turno quedan muy angostos, la planilla pasa al "modo de letras" (solo la inicial del empleado). Como Barra y servicio tiene más columnas por día (3+3) que Cocina (3+2), en algunas pantallas de laptop (≈1300–1550 px) Cocina mostraba nombre y horario y Barra solo letras. Ahora, en pantallas de 700 px o más, cada columna mide como mínimo `MIN_LANE` (37 px) en cualquier nivel de zoom, así que ambos grupos muestran nombre y horas; si no cabe, la planilla se desplaza en horizontal. En celular (menos de 700 px) se mantiene el modo de letras para que la semana entre completa. Al añadir o quitar columnas con +/− el modo se recalcula.
+
 ## Reparación automática de turnos "fantasma"
 
 Si un turno queda guardado con un carril que ya no existe ese día (por ejemplo `lane: 7` en un día que solo tiene 5 columnas, algo que pudo pasar con versiones anteriores de los botones +/− o al pisarse datos entre dispositivos), el turno se dibujaba fuera de su columna, no se veía, pero seguía bloqueando el horario de ese empleado. Ahora, al cargar los datos, `repairLanes()` (en `horarios.html`) lo reubica en el carril libre más cercano dentro del rango válido, en Cocina y en Barra. Si quien abre la página es admin (edición desbloqueada), la corrección se guarda en la nube y aparece un aviso; en modo solo lectura se corrige solo en pantalla, sin escribir nada. Además, el dibujo de cada turno limita el carril al rango válido, como segunda red de seguridad.
