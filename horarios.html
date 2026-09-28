@@ -177,6 +177,8 @@ let editMode=false;
 try{editMode=sessionStorage.getItem('horarios-auth')==='1'}catch(e){}
 let filterEmp=null;
 
+let repairPending=0;   // turnos reubicados por repairLanes() que aún no se guardaron en la nube
+let pulled=false;      // true cuando ya se hizo el primer pull (evita guardar datos locales viejos encima de los de la nube)
 const clone=o=>JSON.parse(JSON.stringify(o));
 function defaultDayLanes(g){return DEFAULT_N[g].map(n=>({n}))}
 function defaultLanes(g){return Array.from({length:7},()=>defaultDayLanes(g))}
@@ -191,19 +193,48 @@ function normLanes(g,lanes){
   }
   return defaultLanes(g);
 }
+/* Un turno con carril que ya no existe ese día (p. ej. lane 7 cuando el día solo tiene 5 columnas)
+   se dibuja fuera de su columna, no se ve, pero sigue bloqueando al empleado. Se reubica en el carril
+   libre más cercano dentro del rango válido. Devuelve cuántos turnos reparó. */
+function repairLanes(d){
+  let n=0;
+  ['cocina','barra'].forEach(g=>{
+    const G=d[g];if(!G||!Array.isArray(G.shifts)||!Array.isArray(G.lanes))return;
+    G.shifts.forEach(sh=>{
+      if(!Number.isInteger(sh.day)||sh.day<0||sh.day>6||!G.lanes[sh.day])return;
+      const Ld=G.lanes[sh.day].reduce((a,x)=>a+x.n,0);
+      if(Number.isInteger(sh.lane)&&sh.lane>=0&&sh.lane<Ld)return;
+      const want=Number.isFinite(sh.lane)?Math.max(0,Math.min(Ld-1,Math.round(sh.lane))):0;
+      const ord=[...Array(Ld).keys()].sort((x,y)=>Math.abs(x-want)-Math.abs(y-want));
+      const free=ord.find(k=>!G.shifts.some(o=>o!==sh&&o.day===sh.day&&o.lane===k&&sh.start<o.end&&sh.end>o.start));
+      sh.lane=free===undefined?want:free;
+      n++;
+    });
+  });
+  return n;
+}
+function flushRepair(){
+  if(!repairPending||!editMode||!pulled)return;
+  const n=repairPending;repairPending=0;
+  save();
+  toast(n===1?'Se reparó 1 turno que estaba fuera de las columnas.':`Se repararon ${n} turnos que estaban fuera de las columnas.`);
+}
 function hasContent(d){return !!(d&&d.cocina&&d.barra&&(d.cocina.shifts.length||d.cocina.rests.length||d.barra.shifts.length||d.barra.rests.length))}
 function migrate(raw){
   if(!raw)return null;
   if(Array.isArray(raw)){
     const order=['jefferson','jean','maria','alberto','alonso','edgar'];
-    return{
+    const out={
       cocina:{emp:clone(DEFAULT_COCINA),shifts:raw.map(s=>({...s,emp:order[s.emp]??s.emp})),rests:[],lanes:defaultLanes('cocina')},
       barra:{emp:clone(DEFAULT_BARRA),shifts:[],rests:[],lanes:defaultLanes('barra')}
     };
+    const nf=repairLanes(out);if(nf)repairPending=nf;
+    return out;
   }
   if(raw.cocina&&raw.barra&&Array.isArray(raw.cocina.shifts)&&Array.isArray(raw.barra.shifts)){
     raw.cocina.lanes=normLanes('cocina',raw.cocina.lanes);
     raw.barra.lanes=normLanes('barra',raw.barra.lanes);
+    const nf=repairLanes(raw);if(nf)repairPending=nf;
     return raw;
   }
   return null;
@@ -241,6 +272,8 @@ async function pull(){
       save();
     }
   }catch(e){}
+  pulled=true;
+  flushRepair();
 }
 
 const $=s=>document.querySelector(s),sc=$('#sc'),grid=$('#grid'),pal=$('#pal'),msg=$('#msg'),empd=$('#empd');
@@ -322,8 +355,8 @@ function render(){
       n.innerHTML=`<div class="in" data-i="${e.n[0]}" style="background:${e.c}"><div class="rz t" data-m="t"></div><b>${e.n}</b><span></span><button class="x" aria-label="Quitar turno">×</button><div class="rz b" data-m="b"></div></div>`;
       ov.appendChild(n);nodes.set(s.id,n);
     }
-    const Ld=dayTotal(s.day),dayPct=100/7;
-    n.style.cssText=`left:${s.day*dayPct+(s.lane/Ld)*dayPct}%;width:${dayPct/Ld}%;top:${(s.start-S)*HH}px;height:${(s.end-s.start)*HH}px`;
+    const Ld=dayTotal(s.day),dayPct=100/7,ln=Math.max(0,Math.min(Ld-1,s.lane));
+    n.style.cssText=`left:${s.day*dayPct+(ln/Ld)*dayPct}%;width:${dayPct/Ld}%;top:${(s.start-S)*HH}px;height:${(s.end-s.start)*HH}px`;
     n.querySelector('span').innerHTML=fmt(s.start)+'<br>'+fmt(s.end);
     n.style.display=(!editMode&&filterEmp&&s.emp!==filterEmp)?'none':'';
   });
@@ -680,6 +713,7 @@ function applyEditMode(){
   $('#modeRow').style.display=editMode?'':'none';
   if(!editMode&&mode==='real')setMode('plan'); // el control de horario es solo para admin
   updateHint();
+  flushRepair();
   document.querySelectorAll('.chip[data-id]').forEach(c=>c.classList.toggle('sel',!editMode&&c.dataset.id===filterEmp));
   const all=$('#allBtn');if(all)all.classList.toggle('sel',!editMode&&!filterEmp);
   render();renderRests();

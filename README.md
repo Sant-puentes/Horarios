@@ -58,6 +58,10 @@ Además de la planilla de turnos *planeados*, la app registra las horas *reales*
 - Es de solo lectura: no se puede arrastrar, estirar ni borrar nada ahí; para corregir un marcaje habría que hacerlo directamente en Redis (no hay UI de edición todavía).
 - Limitación conocida: los marcajes se podan automáticamente a los 45 días (ver `api/attendance.js`), así que el selector no llega a mostrar semanas más viejas que eso; tampoco se soportan turnos que cruzan la medianoche.
 
+## Reparación automática de turnos "fantasma"
+
+Si un turno queda guardado con un carril que ya no existe ese día (por ejemplo `lane: 7` en un día que solo tiene 5 columnas, algo que pudo pasar con versiones anteriores de los botones +/− o al pisarse datos entre dispositivos), el turno se dibujaba fuera de su columna, no se veía, pero seguía bloqueando el horario de ese empleado. Ahora, al cargar los datos, `repairLanes()` (en `horarios.html`) lo reubica en el carril libre más cercano dentro del rango válido, en Cocina y en Barra. Si quien abre la página es admin (edición desbloqueada), la corrección se guarda en la nube y aparece un aviso; en modo solo lectura se corrige solo en pantalla, sin escribir nada. Además, el dibujo de cada turno limita el carril al rango válido, como segunda red de seguridad.
+
 ## QR del local (prueba de presencia)
 
 Para que nadie pueda marcar entrada o salida desde su casa, el marcaje exige haber escaneado un **QR físico pegado en el local**:
