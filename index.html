@@ -25,6 +25,7 @@ button:disabled{opacity:.5;cursor:default}
 .banner.err{background:rgba(192,57,43,.1);color:var(--out);border:1px solid rgba(192,57,43,.25);font-weight:500;font-size:13.5px}
 .banner small{display:block;font-weight:500;opacity:.85;margin-top:4px;font-size:12.5px}
 @keyframes pop{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
+.scanwarn{background:rgba(192,57,43,.1);color:var(--out);border:1px solid rgba(192,57,43,.25);border-radius:10px;padding:10px 12px;font-size:13px;font-weight:600;margin:0 0 14px}
 .sep{border:0;border-top:1px solid var(--line);margin:22px 0 18px}
 a.goto{display:block;width:100%;box-sizing:border-box;padding:13px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:14.5px;font-weight:600;text-decoration:none}
 </style>
@@ -33,6 +34,7 @@ a.goto{display:block;width:100%;box-sizing:border-box;padding:13px;border-radius
 <div class="card">
   <h1>HORARIOS CASAPAELLA</h1>
   <p class="hint">Escribe tu nombre tal como aparece en el sistema y toca "Marcar". La primera vez del día registra tu entrada; la siguiente, tu salida.</p>
+  <p class="scanwarn" id="scanwarn" style="display:none">📷 Para marcar, escanea el QR pegado en el local con la cámara de tu celular.</p>
   <form id="f">
     <input id="name" list="names" placeholder="Tu nombre" autocomplete="off" autofocus required>
     <datalist id="names"></datalist>
@@ -43,8 +45,12 @@ a.goto{display:block;width:100%;box-sizing:border-box;padding:13px;border-radius
   <a class="goto" href="horarios.html">Ver horarios →</a>
 </div>
 <script>
+// Código del QR del local, tomado del link escaneado. A propósito NO se guarda en
+// localStorage/sessionStorage: así hay que volver a escanear el QR cada vez que se marca.
+const LOC=new URLSearchParams(location.search).get('loc')||'';
 const $=s=>document.querySelector(s),f=$('#f'),input=$('#name'),btn=$('#btn'),result=$('#result'),names=$('#names');
 
+if(!LOC)$('#scanwarn').style.display='';
 fetch('/api/shifts').then(r=>r.ok?r.json():null).then(d=>{
   if(!d)return;
   const all=[...(d.cocina&&d.cocina.emp||[]),...(d.barra&&d.barra.emp||[])];
@@ -58,7 +64,7 @@ f.addEventListener('submit',async ev=>{
   const name=input.value.trim();if(!name)return;
   btn.disabled=true;btn.textContent='Marcando…';
   try{
-    const r=await fetch('/api/attendance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+    const r=await fetch('/api/attendance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,loc:LOC})});
     const data=await r.json();
     if(!r.ok){
       result.innerHTML=`<div class="banner err">${data.error||'No se pudo registrar el marcaje.'}</div>`;

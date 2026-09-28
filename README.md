@@ -58,6 +58,18 @@ Además de la planilla de turnos *planeados*, la app registra las horas *reales*
 - Es de solo lectura: no se puede arrastrar, estirar ni borrar nada ahí; para corregir un marcaje habría que hacerlo directamente en Redis (no hay UI de edición todavía).
 - Limitación conocida: los marcajes se podan automáticamente a los 45 días (ver `api/attendance.js`), así que el selector no llega a mostrar semanas más viejas que eso; tampoco se soportan turnos que cruzan la medianoche.
 
+## QR del local (prueba de presencia)
+
+Para que nadie pueda marcar entrada o salida desde su casa, el marcaje exige haber escaneado un **QR físico pegado en el local**:
+
+- **Cómo se usa:** el empleado escanea el QR con la cámara normal de su celular; eso abre `index.html?loc=<código>` y ya puede escribir su nombre y marcar. Si abre la página sin escanear (por marcador, escribiendo la dirección, etc.), aparece el aviso *"escanea el QR pegado en el local"* y el servidor rechaza el marcaje (403).
+- **Hay que escanear cada vez:** el código viaja solo en la URL y a propósito **no se guarda** en el navegador, así que no sirve guardar el link para marcar después desde otro lado.
+- **Cómo lo genera el admin:** en `horarios.html`, con la edición desbloqueada, el botón **QR del local** muestra el QR (con el link debajo), permite **Imprimir** una hoja lista para pegar, y **Regenerar código** (invalida el QR impreso anterior; hay que reimprimirlo. Útil si alguien le toma foto y lo comparte fuera del local).
+- **Backend:** `api/location.js` guarda el código en Redis (`horarios:location`) y exige la clave de edición incluso para leerlo (si fuera público, cualquiera armaría el link sin ir al local). `api/attendance.js` compara el código recibido con el guardado.
+- **Transición:** mientras el admin no haya generado el QR por primera vez (abrir el botón "QR del local" lo crea), el marcaje sigue funcionando como antes, sin exigir código.
+- **Qué NO resuelve:** el QR prueba que *alguien* estaba en el local, no *quién*. Un compañero presente aún podría escribir el nombre de otro que no llegó, y quien tenga el link (por ejemplo, una foto del QR) puede usarlo hasta que se regenere. Por ahora se decidió identificar solo por nombre; si más adelante hace falta, la siguiente capa natural es un PIN corto por empleado.
+- El QR se dibuja en el navegador con la librería `qrcode-generator` (MIT, Kazuhiko Arase), incluida minificada dentro de `horarios.html`, sin depender de servicios externos.
+
 ## Subcarriles por categoría (Cocina/Producción, Barra/Servicio)
 
 Dentro de cada día, las columnas de turnos se dividen en dos categorías con su propio ancho: en Cocina, "Cocina" (3 columnas) y "Producción" (2 columnas); en Barra y servicio, "Barra" (3) y "Servicio" (3). Los botones **+/-** junto a cada etiqueta (visibles solo en modo edición) ajustan cuántas columnas tiene esa categoría *ese día en particular* (mínimo 1, máximo 6) — no se puede quitar la última columna de una categoría si todavía tiene turnos asignados ese día.

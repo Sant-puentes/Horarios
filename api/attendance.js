@@ -7,7 +7,8 @@
 // alguien adelante/atrase su hora real).
 //
 // GET  /api/attendance         -> devuelve el arreglo completo de marcajes.
-// POST /api/attendance {name}  -> busca un empleado (en Cocina o en Barra y
+// POST /api/attendance {name, loc} -> `loc` es el código del QR del local
+//   (ver api/location.js); si el admin ya generó uno, es obligatorio. Busca un empleado (en Cocina o en Barra y
 //   servicio, leyendo el roster actual desde "horarios:shifts") cuyo nombre
 //   coincida con `name` (sin distinguir mayúsculas ni acentos). Si lo
 //   encuentra, decide automáticamente si el marcaje es 'entrada' o 'salida'
@@ -28,6 +29,7 @@ const REDIS_URL = process.env.HORARIOS_KV_REST_API_URL;
 const REDIS_TOKEN = process.env.HORARIOS_KV_REST_API_TOKEN;
 const KEY = 'horarios:attendance';
 const ROSTER_KEY = 'horarios:shifts';
+const LOC_KEY = 'horarios:location'; // código del QR físico del local (ver api/location.js)
 const MAX_AGE_DAYS = 45; // se podan marcajes más viejos que esto en cada escritura
 
 function normalize(s) {
@@ -95,6 +97,18 @@ module.exports = async (req, res) => {
       const name = body && typeof body.name === 'string' ? body.name : '';
       if (!name.trim()) {
         res.status(400).json({ error: 'Falta el nombre.' });
+        return;
+      }
+
+      // Prueba de presencia: si el admin ya generó el QR del local, el marcaje
+      // debe traer ese código (viene en el link del QR escaneado). Si todavía
+      // no existe, se deja marcar como antes para no bloquear el sistema
+      // mientras se configura.
+      const loc = await redisGet(LOC_KEY);
+      if (loc && loc.token && (typeof body.loc !== 'string' || body.loc !== loc.token)) {
+        res.status(403).json({
+          error: 'Para marcar tienes que escanear el QR pegado en el local con la cámara de tu celular.'
+        });
         return;
       }
 
