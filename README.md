@@ -4,7 +4,23 @@ Visor web para organizar los turnos semanales del restaurante: una planilla de l
 
 ## Uso
 
-Al entrar al sitio (`index.html`), la primera pantalla es **HORARIOS CASAPAELLA**: un formulario para marcar la entrada o salida (solo pide el nombre) y, debajo, un botón **"Ver horarios →"** que lleva a `horarios.html`, donde está la planilla completa (y donde se entra como admin con la clave para editar). No necesita instalación, servidor ni conexión a internet para la parte de la planilla: todo funciona en el propio archivo (HTML + CSS + JavaScript). Los turnos se guardan en el navegador de cada dispositivo (`localStorage`) y, si `api/shifts.js` está desplegado y configurado (ver abajo), también se sincronizan en la nube para compartirse entre dispositivos.
+Al entrar al sitio (`index.html`), la primera pantalla es **HORARIOS CASAPAELLA**: un formulario para marcar la entrada o salida (solo pide el nombre) y, debajo, un botón **"Ver horarios →"** que lleva a `horarios.html`, donde está la planilla completa (y donde se entra como admin con la clave para editar). No necesita instalación ni build: todo es HTML + CSS + JavaScript plano, sin transpilar. Los turnos se guardan en el navegador de cada dispositivo (`localStorage`) y, si `api/shifts.js` está desplegado y configurado (ver abajo), también se sincronizan en la nube para compartirse entre dispositivos.
+
+## Estructura de archivos
+
+```
+index.html            → pantalla de bienvenida / marcaje (autosuficiente, un solo archivo)
+horarios.html          → cascarón HTML de la planilla + panel admin
+assets/horarios.css    → CSS de horarios.html
+assets/horarios.js     → JS de horarios.html (datos, drag&drop, Control de horario, QR del local, etc.)
+vendor/qrcode.min.js   → librería de generación de QR (MIT), solo la usa horarios.html
+api/shifts.js          → guarda/lee el horario planeado en Redis
+api/attendance.js      → guarda/lee los marcajes de entrada/salida
+api/location.js        → guarda el código secreto del QR del local
+CONTEXTO.md            → mapa corto del proyecto, pensado para pegar al abrir un chat nuevo
+```
+
+`index.html` se dejó como un solo archivo autosuficiente porque es chico (~5 KB) y no lo justifica. `horarios.html` sí se separó en HTML/CSS/JS porque pesaba más de 60 KB en un solo archivo — dividirlo hace más barato (en tokens, para quien lo edite con IA) leer o tocar solo la parte que cambia.
 
 ## Sincronización en la nube (Vercel + Redis)
 
@@ -76,7 +92,7 @@ Para que nadie pueda marcar entrada o salida desde su casa, el marcaje exige hab
 - **Backend:** `api/location.js` guarda el código en Redis (`horarios:location`) y exige la clave de edición incluso para leerlo (si fuera público, cualquiera armaría el link sin ir al local). `api/attendance.js` compara el código recibido con el guardado.
 - **Transición:** mientras el admin no haya generado el QR por primera vez (abrir el botón "QR del local" lo crea), el marcaje sigue funcionando como antes, sin exigir código.
 - **Qué NO resuelve:** el QR prueba que *alguien* estaba en el local, no *quién*. Un compañero presente aún podría escribir el nombre de otro que no llegó, y quien tenga el link (por ejemplo, una foto del QR) puede usarlo hasta que se regenere. Por ahora se decidió identificar solo por nombre; si más adelante hace falta, la siguiente capa natural es un PIN corto por empleado.
-- El QR se dibuja en el navegador con la librería `qrcode-generator` (MIT, Kazuhiko Arase), incluida minificada dentro de `horarios.html`, sin depender de servicios externos.
+- El QR se dibuja en el navegador con la librería `qrcode-generator` (MIT, Kazuhiko Arase), servida desde `vendor/qrcode.min.js`, sin depender de servicios externos.
 
 ## Subcarriles por categoría (Cocina/Producción, Barra/Servicio)
 
