@@ -16,7 +16,7 @@ button.clr,a.clr,select.clr{background:none;border:1px solid var(--line);color:v
 .acts{position:relative;align-items:center}
 button.clr.ico{width:36px;height:36px;padding:0;font-size:17px;line-height:1;display:inline-flex;align-items:center;justify-content:center}
 #menu{position:absolute;right:0;top:calc(100% + 6px);z-index:40;display:flex;flex-direction:column;gap:4px;min-width:170px;padding:6px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.22)}
-#menu[hidden]{display:none}
+#menu[hidden],#menu button[hidden]{display:none}
 #menu button.clr{border:0;text-align:left;padding:10px 12px;font-size:14px;color:var(--ink)}#menu button.clr:active{background:var(--alt)}
 .chip{flex:0 1 auto;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 10px;border-radius:9px;font-size:13px;white-space:nowrap;color:#fff;font-weight:600;cursor:grab;touch-action:none;-webkit-touch-callout:none;box-shadow:0 1px 0 rgba(0,0,0,.18)}
 .chip small{font-weight:500;opacity:.85;font-size:11px}
@@ -97,3 +97,19 @@ body.editing .allchip{display:none}
 .compact .blk.real .tag{display:none}
 body.attmode #pal,body.attmode .rest,body.attmode #empBtn,body.attmode #locBtn,body.attmode #clr,body.attmode .sub .lnbtn{display:none}
 .clockfab{position:fixed;left:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:30;box-shadow:0 2px 10px rgba(0,0,0,.18);background:var(--panel)}
+/* Corregir marcajes (Control de horario, admin) */
+.blk.real{cursor:pointer}
+#attd{max-width:440px}
+#attList{max-height:48vh;overflow:auto;margin-bottom:10px}
+#attd.busy{pointer-events:none;opacity:.7}
+.attday{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--mut);margin:10px 0 4px}
+.attgrp{border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:6px}
+.attgrp>b{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.attgrp .dot{width:12px;height:12px;border-radius:50%;flex:0 0 auto}
+.attrow{display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap}
+.attrow select,.attrow input,.attaddrow select,.attaddrow input{font:inherit;font-size:14px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);min-height:36px;box-sizing:border-box}
+.attrow input[type=time],.attaddrow input[type=time]{flex:0 0 auto}
+.attrow small{flex:1 0 100%;color:var(--mut);font-size:11px}
+.attwarn{color:#c0392b;font-size:12px;margin:2px 0 0}
+.attadd{border-top:1px solid var(--line);padding-top:10px}
+.attaddrow{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}.attaddrow>select{flex:1 1 120px}

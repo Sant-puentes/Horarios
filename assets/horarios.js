@@ -407,6 +407,7 @@ function setMode(m){
   document.body.classList.toggle('attmode',m==='real');
   $('#realRefresh').style.display=m==='real'?'':'none';
   $('#weekSel').style.display=m==='real'?'':'none';
+  $('#attBtn').hidden=m!=='real';
   updateHint();
   if(m==='real'){
     nodes.forEach(n=>n.remove());nodes.clear();
@@ -564,6 +565,104 @@ $('#empForm').addEventListener('submit',ev=>{
   $('#empName').value='';
   save();buildPalette();renderEmpList();
   $('#empColor').value=hslHex((EMP.length*47)%360);
+});
+
+
+/* ---- Corregir marcajes (admin, en Control de horario) ---- */
+const attd=$('#attd');
+let attFilter=null; // {emp, day} = solo ese empleado ese día; null = toda la semana del grupo
+const DIAS=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+const pad2=n=>String(n).padStart(2,'0');
+const hhmm=d=>pad2(d.getHours())+':'+pad2(d.getMinutes());
+const dayLabel=(mon,i)=>{const d=new Date(mon);d.setDate(d.getDate()+i);return `${DIAS[i]} ${d.getDate()} ${MESES[d.getMonth()].slice(0,3)}`};
+function tsOfDay(mon,i,time){const[h,m]=time.split(':').map(Number),d=new Date(mon);d.setDate(d.getDate()+i);d.setHours(h,m,0,0);return d.toISOString()}
+async function attFetch(body){
+  const r=await fetch(ATT_API,{method:'POST',headers:{'x-edit-key':EDIT_PASSWORD,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.error||('Error '+r.status));
+  return d;
+}
+function attApply(records){ // el servidor devuelve todos los marcajes ya corregidos y ordenados
+  ATT=records;buildWeekOptions();computeReal();packLanesFor('cocina');packLanesFor('barra');
+  if(mode==='real')renderReal();
+  attRender();
+}
+function attRecords(){
+  const mon=activeMonday();
+  return ATT.filter(r=>r.group===group).map(r=>({...r,dt:new Date(r.ts)})).filter(r=>!isNaN(r.dt))
+    .map(r=>({...r,day:dayIndexOf(r.dt,mon)})).filter(r=>r.day!==null).sort((a,b)=>a.dt-b.dt);
+}
+function attRender(){
+  const mon=activeMonday(),todayIdx=dayIndexOf(new Date(),mon);
+  let recs=attRecords();
+  if(attFilter)recs=recs.filter(r=>r.empId===attFilter.emp&&r.day===attFilter.day);
+  const en=id=>{const e=EMP.find(x=>x.id===id);return e?e.n:id};
+  $('#attTitle').textContent='Corregir marcajes — '+(group==='cocina'?'Cocina':'Barra y servicio');
+  $('#attSub').textContent=attFilter?`${en(attFilter.emp)} · ${dayLabel(mon,attFilter.day)}`:`Semana del ${formatWeek(mon)}`;
+  $('#attAll').style.display=attFilter?'':'none';
+  let html='';
+  for(let d=0;d<7;d++){
+    const ofDay=recs.filter(r=>r.day===d);if(!ofDay.length)continue;
+    html+=`<div class="attday">${dayLabel(mon,d)}</div>`;
+    [...new Set(ofDay.map(r=>r.empId))].forEach(id=>{
+      const list=ofDay.filter(r=>r.empId===id),e=EMP.find(x=>x.id===id);
+      const ok=list.every((r,i)=>r.type===(i%2?'salida':'entrada'));
+      const warn=!ok?'Revisa el orden: las entradas y salidas deben alternar.':(list.length%2&&d!==todayIdx?'Falta la hora de salida: agrégala abajo o cambia el tipo de un marcaje.':'');
+      html+=`<div class="attgrp"><b><span class="dot" style="background:${e?e.c:'#888'}"></span>${escH(en(id))}</b>`+
+        list.map(r=>`<div class="attrow" data-id="${escH(r.id)}"><select class="attType"><option value="entrada"${r.type==='entrada'?' selected':''}>Entrada</option><option value="salida"${r.type==='salida'?' selected':''}>Salida</option></select><input type="time" class="attTime" value="${hhmm(r.dt)}"><button class="clr rm attDel" type="button" aria-label="Borrar marcaje">Borrar</button>${r.manual?'<small>Agregado a mano</small>':r.edited?'<small>Corregido</small>':''}</div>`).join('')+
+        (warn?`<p class="attwarn">${warn}</p>`:'')+'</div>';
+    });
+  }
+  $('#attList').innerHTML=html||'<p class="hint">No hay marcajes en esta semana para este grupo. Usa "Agregar" abajo.</p>';
+}
+function attFillAdd(){
+  const mon=activeMonday(),todayIdx=dayIndexOf(new Date(),mon);
+  $('#attEmp').innerHTML=EMP.map(e=>`<option value="${escH(e.id)}">${escH(e.n)}</option>`).join('');
+  $('#attDay').innerHTML=DIAS.map((_,i)=>`<option value="${i}">${dayLabel(mon,i)}</option>`).join('');
+  if(attFilter){$('#attEmp').value=attFilter.emp;$('#attDay').value=attFilter.day}
+  else $('#attDay').value=todayIdx===null?0:todayIdx;
+  attGuessType();
+}
+function attGuessType(){ // sugiere Salida si ese empleado ya tiene una cantidad impar de marcajes ese día
+  const n=attRecords().filter(r=>r.empId===$('#attEmp').value&&r.day===+$('#attDay').value).length;
+  $('#attType').value=n%2?'salida':'entrada';
+}
+function attOpen(filter){
+  attFilter=filter||null;attFillAdd();attRender();$('#attTime').value='';
+  if(!attd.open)attd.showModal();
+}
+async function attRun(body){
+  attd.classList.add('busy');
+  try{attApply((await attFetch(body)).records)}
+  catch(e){toast(e.message||'No se pudo guardar el cambio.');attRender()}
+  attd.classList.remove('busy');
+}
+$('#attBtn').onclick=()=>{if(editMode&&mode==='real')attOpen(null)};
+$('#attAll').onclick=()=>{attFilter=null;attRender()};
+$('#attClose').onclick=()=>attd.close();
+attd.addEventListener('click',ev=>{if(ev.target===attd)attd.close()});
+$('#attEmp').addEventListener('change',attGuessType);$('#attDay').addEventListener('change',attGuessType);
+$('#attList').addEventListener('change',ev=>{
+  const row=ev.target.closest('.attrow');if(!row||!(ev.target.matches('.attType,.attTime')))return;
+  const r=ATT.find(x=>x.id===row.dataset.id),time=row.querySelector('.attTime').value;if(!r||!time)return;
+  const d=new Date(r.ts),[h,m]=time.split(':').map(Number);d.setHours(h,m,0,0);
+  attRun({action:'edit',id:r.id,ts:d.toISOString(),type:row.querySelector('.attType').value});
+});
+$('#attList').addEventListener('click',ev=>{
+  const b=ev.target.closest('.attDel');if(!b)return;
+  if(!confirm('¿Borrar este marcaje?'))return;
+  attRun({action:'delete',id:b.closest('.attrow').dataset.id});
+});
+$('#attAddBtn').onclick=()=>{
+  const time=$('#attTime').value;if(!time)return toast('Elige la hora del marcaje.');
+  attRun({action:'add',group,empId:$('#attEmp').value,type:$('#attType').value,ts:tsOfDay(activeMonday(),+$('#attDay').value,time)});
+  $('#attTime').value='';
+};
+ov.addEventListener('click',ev=>{ // tocar un bloque de Control de horario abre la corrección de ese empleado ese día
+  if(!editMode||mode!=='real')return;
+  const n=ev.target.closest('.blk.real');if(!n)return;
+  const hit=[...realNodes].find(([,v])=>v===n);if(!hit)return;
+  const iv=(REAL[group]||[]).find(x=>x.id===hit[0]);if(iv)attOpen({emp:iv.emp,day:iv.day});
 });
 
 /* candado de edición */

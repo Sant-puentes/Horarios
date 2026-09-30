@@ -19,6 +19,7 @@
         <button class="clr" id="empBtn">Empleados</button>
         <button class="clr" id="locBtn">QR del local</button>
         <button class="clr" id="devBtn">Celulares</button>
+        <button class="clr" id="attBtn" hidden>Corregir marcajes</button>
         <button class="clr" id="clr">Vaciar semana</button>
       </div>
     </div>
@@ -51,6 +52,18 @@
     <button class="clr" id="locRegen" type="button">Regenerar código</button>
     <span><button class="clr" id="locPrint" type="button">Imprimir</button> <button class="clr" id="locClose" type="button">Cerrar</button></span>
   </div>
+</dialog>
+<dialog id="attd">
+  <h2 id="attTitle" style="margin:0 0 2px;font-size:15px">Corregir marcajes</h2>
+  <p class="hint" id="attSub" style="margin:0 0 10px"></p>
+  <button class="clr" id="attAll" type="button" style="display:none;margin-bottom:8px">Ver toda la semana</button>
+  <div id="attList"></div>
+  <div class="attadd">
+    <b>Agregar un marcaje olvidado</b>
+    <div class="attaddrow"><select class="clr" id="attEmp"></select><select class="clr" id="attDay"></select></div>
+    <div class="attaddrow"><select class="clr" id="attType"><option value="entrada">Entrada</option><option value="salida">Salida</option></select><input type="time" id="attTime"><button class="clr" id="attAddBtn" type="button">Agregar</button></div>
+  </div>
+  <div style="text-align:right;margin-top:14px"><button class="clr" id="attClose" type="button">Cerrar</button></div>
 </dialog>
 <dialog id="devd">
   <h2 style="margin:0 0 6px;font-size:15px">Celulares de los empleados</h2>

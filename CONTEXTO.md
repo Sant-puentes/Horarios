@@ -17,7 +17,7 @@ App de horarios de personal para un restaurante (Cocina / Barra y servicio), con
 | `vendor/jsqr.min.js` | Librería jsQR (Apache-2.0). `index.html` la carga solo si el navegador no tiene `BarcodeDetector` (iPhone). |
 | `vendor/qrcode.min.js` | Librería `qrcode-generator` (Kazuhiko Arase, MIT) minificada. Solo genera el QR del panel admin; no se toca casi nunca. |
 | `api/shifts.js` | GET/POST del horario planeado (`horarios:shifts` en Redis). POST exige header `x-edit-key`. |
-| `api/attendance.js` | POST registra marcaje (alterna entrada/salida por empleado); exige `loc` si ya hay QR de local configurado. GET público, devuelve el historial (≤45 días). |
+| `api/attendance.js` | POST registra marcaje (alterna entrada/salida por empleado); exige `loc` si ya hay QR de local configurado. GET público, devuelve el historial (≤45 días). Con `x-edit-key` acepta `action` `edit`/`delete`/`add` para que el admin corrija marcajes (Control → tocar un bloque o ⋯ → Corregir marcajes). |
 | `api/devices.js` | Registro de celulares por empleado (`horarios:devices`): el admin genera códigos de un solo uso (GET/`invite`/`reset` exigen `x-edit-key`); el empleado los canjea (`register`, público). `api/attendance.js` exige que el celular (`device`) coincida con el registrado. Panel: menú ⋯ → "Celulares" en `horarios.html`. |
 | `api/location.js` | Token secreto del QR del local (`horarios:location`). GET y POST exigen `x-edit-key` (nunca es público, si no cualquiera arma el link sin ir al local). |
 | `CONTEXTO.md` | Este archivo. |

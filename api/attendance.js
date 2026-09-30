@@ -18,6 +18,15 @@
 //   mirando cuál fue su último marcaje, y lo agrega. Responde con el marcaje
 //   creado.
 //
+// POST /api/attendance {action:'edit'|'delete'|'add', ...}  (header x-edit-key, solo admin)
+//   corrige los marcajes registrados (Control de horario en horarios.html):
+//   edit   {id, ts?, type?}                 cambia la hora y/o el tipo de un marcaje
+//   delete {id}                             borra un marcaje
+//   add    {empId, group, type, ts}         agrega un marcaje olvidado
+//   Los marcajes tocados quedan con `edited` (ISO de la corrección) o `manual:true` (agregado a
+//   mano). Tras cada cambio se reordena el arreglo por `ts` (el marcaje normal decide entrada/
+//   salida mirando el último) y se responde {ok, records} con el arreglo completo.
+//
 // Requiere las mismas variables de entorno que api/shifts.js:
 //   HORARIOS_KV_REST_API_URL
 //   HORARIOS_KV_REST_API_TOKEN
@@ -35,6 +44,8 @@ const ROSTER_KEY = 'horarios:shifts';
 const DEV_KEY = 'horarios:devices';   // celulares registrados por empleado (ver api/devices.js)
 const LOC_KEY = 'horarios:location'; // código del QR físico del local (ver api/location.js)
 const crypto = require('crypto');
+const EDIT_KEY = '1111'; // mismo candado simple que api/shifts.js
+const TYPES = ['entrada', 'salida'];
 const MAX_AGE_DAYS = 45; // se podan marcajes más viejos que esto en cada escritura
 
 function normalize(s) {
@@ -99,6 +110,62 @@ module.exports = async (req, res) => {
       if (typeof body === 'string') {
         try { body = JSON.parse(body); } catch (e) { body = null; }
       }
+      // Corrección de marcajes por el admin (no pasa por QR ni por celular registrado).
+      if (body && typeof body.action === 'string') {
+        if (req.headers['x-edit-key'] !== EDIT_KEY) {
+          res.status(401).json({ error: 'Clave de edición inválida o faltante.' });
+          return;
+        }
+        const now = Date.now();
+        const validTs = v => {
+          const t = Date.parse(v);
+          return Number.isFinite(t) && t >= now - MAX_AGE_DAYS * 24 * 60 * 60 * 1000 && t <= now + 36 * 60 * 60 * 1000;
+        };
+        const records = (await redisGet(KEY)) || [];
+
+        if (body.action === 'edit') {
+          const r = records.find(x => x.id === body.id);
+          if (!r) { res.status(404).json({ error: 'No se encontró ese marcaje.' }); return; }
+          if (body.ts !== undefined) {
+            if (!validTs(body.ts)) { res.status(400).json({ error: 'Fecha u hora fuera de rango (máximo 45 días atrás).' }); return; }
+            r.ts = new Date(body.ts).toISOString();
+          }
+          if (body.type !== undefined) {
+            if (!TYPES.includes(body.type)) { res.status(400).json({ error: 'Tipo inválido.' }); return; }
+            r.type = body.type;
+          }
+          r.edited = new Date().toISOString();
+        } else if (body.action === 'delete') {
+          const i = records.findIndex(x => x.id === body.id);
+          if (i < 0) { res.status(404).json({ error: 'No se encontró ese marcaje.' }); return; }
+          records.splice(i, 1);
+        } else if (body.action === 'add') {
+          if (!TYPES.includes(body.type)) { res.status(400).json({ error: 'Tipo inválido.' }); return; }
+          if (!validTs(body.ts)) { res.status(400).json({ error: 'Fecha u hora fuera de rango (máximo 45 días atrás).' }); return; }
+          const roster = await redisGet(ROSTER_KEY);
+          const g = roster && (body.group === 'cocina' || body.group === 'barra') ? roster[body.group] : null;
+          const emp = g && Array.isArray(g.emp) ? g.emp.find(e => e.id === body.empId) : null;
+          if (!emp) { res.status(404).json({ error: 'No se encontró ese empleado.' }); return; }
+          records.push({
+            id: Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+            empId: emp.id,
+            group: body.group,
+            name: emp.n,
+            type: body.type,
+            ts: new Date(body.ts).toISOString(),
+            manual: true
+          });
+        } else {
+          res.status(400).json({ error: 'Acción desconocida.' });
+          return;
+        }
+
+        records.sort((a, b) => (Date.parse(a.ts) || 0) - (Date.parse(b.ts) || 0));
+        await redisSet(KEY, records);
+        res.status(200).json({ ok: true, records });
+        return;
+      }
+
       const name = body && typeof body.name === 'string' ? body.name : '';
       if (!name.trim()) {
         res.status(400).json({ error: 'Falta el nombre.' });

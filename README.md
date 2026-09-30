@@ -85,6 +85,17 @@ Además de la planilla de turnos *planeados*, la app registra las horas *reales*
 - Es de solo lectura: no se puede arrastrar, estirar ni borrar nada ahí; para corregir un marcaje habría que hacerlo directamente en Redis (no hay UI de edición todavía).
 - Limitación conocida: los marcajes se podan automáticamente a los 45 días (ver `api/attendance.js`), así que el selector no llega a mostrar semanas más viejas que eso; tampoco se soportan turnos que cruzan la medianoche.
 
+### Corregir marcajes (solo admin)
+
+Si alguien marcó mal, olvidó marcar la salida o se equivocó de hora, el admin puede corregirlo desde **Control** sin tocar Redis:
+
+- **Cómo abrirlo:** toca un bloque de Control (abre solo los marcajes de ese empleado ese día) o usa **⋯ → Corregir marcajes** (lista toda la semana del grupo, agrupada por día y empleado). El botón del menú solo aparece en Control.
+- **Editar:** cambia el tipo (Entrada/Salida) o la hora de una fila; se guarda al confirmar y el bloque se recalcula al instante. **Borrar** elimina un marcaje (pide confirmación).
+- **Agregar un marcaje olvidado:** elige empleado, día de la semana, tipo y hora, y toca **Agregar**. El formulario sugiere *Salida* si ese día el empleado tiene un número impar de marcajes.
+- **Avisos:** si las entradas y salidas de un empleado en un día no alternan, o falta la salida en un día que ya pasó, la lista lo indica en rojo.
+- **Trazabilidad:** los marcajes corregidos quedan con `edited` (fecha de la corrección) y los agregados a mano con `manual: true`; en la lista se ven como "Corregido" / "Agregado a mano".
+- **API:** `POST /api/attendance` con `{action:'edit'|'delete'|'add', ...}` y el header `x-edit-key` (mismo candado `1111`). No pasa por el QR del local ni por el celular registrado. No se aceptan horas de más de 45 días atrás (se podarían) ni de más de 36 h en el futuro. Tras cada cambio el arreglo se reordena por hora, para que el siguiente marcaje normal alterne bien entrada/salida.
+- **Límites:** solo se edita la hora dentro del mismo día del marcaje (para pasarlo a otro día, bórralo y agrégalo de nuevo) y no hay historial de valores anteriores.
 ## Celular registrado por empleado (anti-suplantación)
 
 Para que un compañero no pueda marcar con el nombre de otro, cada empleado registra **su celular** una sola vez:
