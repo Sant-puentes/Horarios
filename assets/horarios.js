@@ -254,7 +254,7 @@ function adjustLane(day,catIdx,delta){
     shifts.forEach(s=>{if(s.day===day&&s.lane>=insertAt)s.lane++});
   }
   cat.n=newN;
-  applyGroupLayout(group);save();render();zoom(zi);
+  applyGroupLayout(group);save();render();zoom();
 }
 grid.addEventListener('click',ev=>{
   if(!editMode||mode!=='plan')return;
@@ -272,7 +272,7 @@ function setGroup(g){
   buildPalette();
   document.querySelectorAll('#grp button').forEach(b=>b.classList.toggle('on',b.dataset.g===g));
   if(mode==='real')renderReal();else{render();renderRests()}
-  zoom(zi);
+  zoom();
 }
 
 /* ---- Control de horario: marcajes reales de entrada/salida (solo admin) ---- */
@@ -685,21 +685,53 @@ $('#devList').addEventListener('click',async ev=>{
 $('#devClose').onclick=()=>devd.close();
 devd.addEventListener('click',ev=>{if(ev.target===devd)devd.close()});
 
-const ZS=[312,240,170,110,0];let zi=0;
+/* Zoom de la semana con pinch (dos dedos) o Ctrl+rueda / pellizco del trackpad.
+   `zw` = ancho mínimo de cada día en px; 0 = ajustar la semana a la pantalla ("ver semana"). */
+const ZMAX=312;let zw=0;
 const MIN_LANE=37; // px mínimos por carril para que se lea nombre + horario (por debajo de 36 se pasa a letras)
-function zoom(i){
-  zi=clamp(i,0,ZS.length-1);
-  let cw=ZS[zi];
-  // En pantallas medianas y grandes cada carril mide al menos MIN_LANE px (0 = "Ver semana", ajustar a la pantalla).
-  // Sin este piso, un grupo con más carriles por día (Barra: 3+3=6) caía al modo de letras en pantallas donde el
-  // otro (Cocina: 3+2=5) todavía mostraba nombres. Si no cabe, la planilla se desplaza en horizontal.
-  // En pantallas angostas (celular) se mantiene el ajuste total con letras.
-  if(window.innerWidth>=700)cw=Math.max(cw,maxDayTotal(group)*MIN_LANE);
+function zoom(w){
+  if(w!==undefined)zw=w;
+  let cw=zw;
+  // Cuando la semana se ve "acercada" (o la pantalla es mediana/grande) cada carril mide al menos MIN_LANE px,
+  // sin importar cuántos carriles tenga el grupo: así Cocina (5) y Barra y servicio (6 o más) siempre muestran
+  // nombre + horario y nunca uno en letras y el otro no. Solo en "ver semana" en pantallas angostas (celular)
+  // se ajusta todo a la pantalla y se pasa al modo de letras. Si no cabe, la planilla se desplaza en horizontal.
+  if(cw>0||window.innerWidth>=700)cw=Math.max(cw,maxDayTotal(group)*MIN_LANE);
   grid.style.setProperty('--cw',cw+'px');grid.style.minWidth=cw?'max-content':'0';
   requestAnimationFrame(()=>grid.classList.toggle('compact',ov.clientWidth/(7*maxDayTotal(group))<36));
 }
-$('#zo').onclick=()=>zoom(zi+1);$('#zi').onclick=()=>zoom(zi-1);$('#zf').onclick=()=>zoom(zi===ZS.length-1?0:ZS.length-1);
-$('#zf').textContent='Ver semana';
-addEventListener('resize',()=>zoom(zi));
+const GUT=52; // ancho de la columna de horas (fija a la izquierda)
+const curDayW=()=>(grid.getBoundingClientRect().width-GUT)/7;
+// Cambia el zoom a `newW` px por día manteniendo bajo los dedos (x = cx) el mismo punto de la semana.
+function zoomAt(newW,cx){
+  const left=sc.getBoundingClientRect().left,w0=curDayW();
+  const anchor=(sc.scrollLeft+cx-left-GUT)/w0;
+  // Dos estados con "salto": semana entera ajustada a la pantalla (letras) o acercada (nombre + horario, mínimo MIN_LANE por carril).
+  const fit=(sc.clientWidth-GUT)/7,floor=maxDayTotal(group)*MIN_LANE;
+  zoom(newW<(fit+floor)/2?0:Math.max(floor,Math.min(newW,ZMAX)));
+  sc.scrollLeft=Math.max(0,anchor*curDayW()+GUT-(cx-left));
+}
+let pz=null;
+const tdist=t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
+sc.addEventListener('touchstart',e=>{
+  if(e.touches.length!==2)return;
+  dispatchEvent(new PointerEvent('pointercancel')); // corta un arrastre de turno que estuviera en curso
+  pz={d0:tdist(e.touches)||1,w0:curDayW()};
+  sc.style.overflow='hidden'; // durante el pinch el scroll lo controla el zoom, no el navegador
+},{passive:true});
+sc.addEventListener('touchmove',e=>{
+  if(!pz||e.touches.length!==2)return;
+  if(e.cancelable)e.preventDefault();
+  zoomAt(pz.w0*tdist(e.touches)/pz.d0,(e.touches[0].clientX+e.touches[1].clientX)/2);
+},{passive:false});
+const endPinch=e=>{if(pz&&e.touches.length<2){pz=null;sc.style.overflow=''}};
+sc.addEventListener('touchend',endPinch);sc.addEventListener('touchcancel',endPinch);
+sc.addEventListener('gesturestart',e=>e.preventDefault()); // Safari: que no haga zoom a toda la página
+sc.addEventListener('wheel',e=>{ // pellizco del trackpad / Ctrl+rueda en computador
+  if(!e.ctrlKey)return;
+  e.preventDefault();
+  zoomAt(curDayW()*Math.exp(-e.deltaY*0.006),e.clientX);
+},{passive:false});
+addEventListener('resize',()=>zoom());
 addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){pull();if(mode==='real')loadReal()}});
 buildPalette();render();renderRests();zoom(0);pull();

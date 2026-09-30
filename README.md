@@ -54,7 +54,7 @@ Ya no hace falta editar el código. Con el botón **Empleados** de la cabecera (
 
 ## Modo edición (clave)
 
-Por defecto la app se abre en **solo lectura**: cualquiera puede ver los horarios, cambiar de grupo y hacer zoom, pero no arrastrar, borrar, agregar empleados ni tocar los botones +/- de columnas. Abajo a la derecha hay un botón **Editar**; al tocarlo pide una clave (por ahora, fija: `1111`) y, si es correcta, desbloquea la edición completa hasta que se toque **Bloquear** o se cierre la pestaña (la sesión de edición se guarda en `sessionStorage`, no en `localStorage`).
+Por defecto la app se abre en **solo lectura**: cualquiera puede ver los horarios, cambiar de grupo y hacer zoom con pinch, pero no arrastrar, borrar, agregar empleados ni tocar los botones +/- de columnas. Abajo a la derecha hay un botón **Editar**; al tocarlo pide una clave (por ahora, fija: `1111`) y, si es correcta, desbloquea la edición completa hasta que se toque **Bloquear** o se cierre la pestaña (la sesión de edición se guarda en `sessionStorage`, no en `localStorage`).
 
 Importante: esto es un freno para evitar ediciones accidentales, **no seguridad real**. Como todo el código corre en el navegador, la clave es visible para cualquiera que mire el código fuente de la página, y quien la conozca podría editar desde cualquier dispositivo. `api/shifts.js` también exige esa misma clave (header `x-edit-key`) antes de guardar en la nube, así que ni siquiera alguien que ataque la API directamente puede escribir sin ella — pero sigue sin ser una clave por usuario ni nada auditable. Si más adelante hace falta algo más serio, lo natural es reemplazar esto por variables de entorno por clave y, idealmente, autenticación real por persona.
 
@@ -89,7 +89,11 @@ Para que un compañero no pueda marcar con el nombre de otro, cada empleado regi
 
 ## Nombres visibles en Cocina y en Barra y servicio
 
-Cuando los bloques de turno quedan muy angostos, la planilla pasa al "modo de letras" (solo la inicial del empleado). Como Barra y servicio tiene más columnas por día (3+3) que Cocina (3+2), en algunas pantallas de laptop (≈1300–1550 px) Cocina mostraba nombre y horario y Barra solo letras. Ahora, en pantallas de 700 px o más, cada columna mide como mínimo `MIN_LANE` (37 px) en cualquier nivel de zoom, así que ambos grupos muestran nombre y horas; si no cabe, la planilla se desplaza en horizontal. En celular (menos de 700 px) se mantiene el modo de letras para que la semana entre completa. Al añadir o quitar columnas con +/− el modo se recalcula.
+## Zoom de la semana (pinch)
+
+La semana se acerca y se aleja con **dos dedos** (pinch) sobre la planilla, sin botones; en computador, con Ctrl + rueda o el pellizco del trackpad. El punto que quedas tocando se mantiene bajo los dedos. Hay dos estados: **semana completa** ajustada a la pantalla y **acercada** (hasta 312 px por día, con desplazamiento horizontal). Si empiezas un pinch mientras arrastras un turno, el arrastre se corta.
+
+Cuando los bloques de turno quedan muy angostos, la planilla pasa al "modo de letras" (solo la inicial del empleado). Como Barra y servicio tiene más columnas por día (3+3 o más) que Cocina (3+2), antes Cocina podía mostrar nombre y horario mientras Barra solo letras. Ahora, siempre que la semana esté acercada (en cualquier pantalla) o la pantalla mida 700 px o más, cada columna mide como mínimo `MIN_LANE` (37 px), sin importar cuántas columnas tenga el grupo, así que ambos grupos muestran nombre y horas; si no cabe, la planilla se desplaza en horizontal. El modo de letras solo aparece con la semana completa en celular (menos de 700 px). Al añadir o quitar columnas con +/− el modo se recalcula.
 
 ## Reparación automática de turnos "fantasma"
 
