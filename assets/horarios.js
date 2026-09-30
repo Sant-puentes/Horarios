@@ -511,6 +511,13 @@ ov.addEventListener('click',ev=>{
   const idx=shifts.findIndex(o=>o.id===id);if(idx>-1)shifts.splice(idx,1);
   save();render();
 });
+/* menú "⋯" (acciones de admin) y ayuda */
+const menu=$('#menu'),menuBtn=$('#menuBtn'),helpBtn=$('#helpBtn'),hintEl=$('#hint');
+function closeMenu(){menu.hidden=true;menuBtn.setAttribute('aria-expanded','false')}
+menuBtn.onclick=ev=>{ev.stopPropagation();const open=menu.hidden;menu.hidden=!open;menuBtn.setAttribute('aria-expanded',String(open))};
+menu.addEventListener('click',closeMenu);
+document.addEventListener('click',ev=>{if(!menu.hidden&&!ev.target.closest('.acts'))closeMenu()});
+helpBtn.onclick=()=>{hintEl.hidden=!hintEl.hidden;helpBtn.setAttribute('aria-expanded',String(!hintEl.hidden))};
 $('#clr').onclick=()=>{if(!editMode||mode!=='plan')return;if(shifts.length&&confirm('¿Vaciar todos los turnos de la semana (solo de este grupo)?')){shifts.length=0;save();render()}};
 
 /* administrar empleados del grupo activo */
@@ -564,6 +571,7 @@ function applyEditMode(){
   document.body.classList.toggle('editing',editMode);
   document.body.classList.toggle('view-only',!editMode);
   $('#editBtn').textContent=editMode?'Bloquear':'Editar';
+  closeMenu();
   $('#modeRow').style.display=editMode?'':'none';
   if(!editMode&&mode==='real')setMode('plan'); // el control de horario es solo para admin
   updateHint();

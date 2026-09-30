@@ -65,6 +65,15 @@ Las dos vistas son la misma pantalla con distinto comportamiento según si está
 - **Sin desbloquear (empleado)**: las horas totales junto a cada nombre en la paleta quedan ocultas. Al tocar el nombre de un empleado, la planilla se filtra para mostrar solo sus turnos y sus días de descanso (los del resto quedan ocultos); hay un chip **"Todos"** al inicio de la paleta para volver a ver a todo el mundo, y tocar de nuevo el mismo nombre también quita el filtro. No hay arrastre ni edición de ningún tipo.
 - **Desbloqueada (admin)**: se ven las horas totales de cada quien, y tocar/arrastrar un nombre sirve para crear turnos (drag and drop) — no filtra nada; siempre se ve la planilla completa de todos.
 
+## Encabezado de horarios.html
+
+El encabezado ocupa poco espacio para dejar la semana a la vista (en celular ~90 px en lectura y ~170 px en edición, antes ~300 y ~390):
+
+- **Sin título.** Solo el selector **Cocina / Barra y servicio** a lo ancho, un botón **?** (muestra u oculta el texto de ayuda de cada modo) y, en edición, un botón **⋯**.
+- **Menú ⋯ (solo admin, con la edición desbloqueada):** **Empleados**, **QR del local**, **Celulares** y **Vaciar semana**. Se cierra al elegir una opción o al tocar fuera. Los botones conservan sus ids (`empBtn`, `locBtn`, `devBtn`, `clr`), así que la lógica no cambió.
+- **Fila de modo (solo edición):** **Planeado / Control**; en Control aparecen en la misma fila el selector de semanas y **↻** (actualizar).
+- **Fichas de empleados más compactas:** en lectura, una sola fila que se desplaza a los lados (**Todos** + nombres); en edición, fichas chicas que se acomodan en 2 filas.
+
 ## Control de horario (marcaje de entrada y salida)
 
 Además de la planilla de turnos *planeados*, la app registra las horas *reales* que cada empleado trabaja.
@@ -81,7 +90,7 @@ Además de la planilla de turnos *planeados*, la app registra las horas *reales*
 Para que un compañero no pueda marcar con el nombre de otro, cada empleado registra **su celular** una sola vez:
 
 - **Qué es el "ID del celular":** un código aleatorio que `index.html` genera y guarda en `localStorage` del navegador (la web no puede leer el IMEI ni nada del hardware). Al servidor solo llega su hash SHA-256 y se guarda en Redis (`horarios:devices`) ligado a un empleado.
-- **Cómo se registra (lo aprueba el admin):** en `horarios.html`, con la edición desbloqueada, el botón **Celulares** lista a todos los empleados; **Código** genera un código de un solo uso (8 caracteres, vence en 24 h) con su QR y link (`index.html?reg=CODIGO`). El empleado lo canjea en su propio celular, ya sea escribiéndolo en "Registrar este celular" o escaneando el QR con su cámara.
+- **Cómo se registra (lo aprueba el admin):** en `horarios.html`, con la edición desbloqueada, el menú **⋯ → Celulares** lista a todos los empleados; **Código** genera un código de un solo uso (8 caracteres, vence en 24 h) con su QR y link (`index.html?reg=CODIGO`). El empleado lo canjea en su propio celular, ya sea escribiéndolo en "Registrar este celular" o escaneando el QR con su cámara.
 - **Qué se exige al marcar:** si el empleado tiene celular registrado, solo puede marcar desde ese celular. Y un celular registrado solo puede marcar a su dueño (no a otros). Si no coincide, el servidor responde 403.
 - **Cambio de celular:** el admin genera un **Código** nuevo y el empleado lo canjea en el celular nuevo; el celular anterior deja de funcionar. **Restablecer** borra el vínculo (ese empleado vuelve a marcar sin restricción hasta registrar otro celular).
 - **Transición:** los empleados sin celular registrado siguen marcando como antes (solo QR del local + nombre), así que hay que registrar a todos para que la protección sea completa. Al quitar un empleado en "Empleados", su vínculo también se borra.
@@ -106,7 +115,7 @@ Para que nadie pueda marcar entrada o salida desde su casa, el marcaje exige hab
 - **Cómo se usa:** el empleado escanea el QR con la cámara normal de su celular; eso abre `index.html?loc=<código>` y ya puede escribir su nombre y marcar. Si abre la página sin escanear (por marcador, escribiendo la dirección, etc.), aparece el aviso *"escanea el QR pegado en el local"* y el servidor rechaza el marcaje (403).
 - **Escáner dentro de la página:** `index.html` tiene el botón **Escanear QR del local**, que abre la cámara trasera y lee el QR sin salir de la web (necesita HTTPS y permiso de cámara). Usa `BarcodeDetector` si el navegador lo trae (Chrome/Android) y, si no, carga `vendor/jsqr.min.js` bajo demanda (iPhone/Safari). Si la cámara falla, el aviso sugiere escanear con la cámara normal del celular, que sigue funcionando (`?loc=`).
 - **Hay que escanear cada vez:** el código viaja solo en la URL y a propósito **no se guarda** en el navegador, así que no sirve guardar el link para marcar después desde otro lado. Tras cada marcaje exitoso el código se borra de memoria y de la URL, y hay que volver a escanear.
-- **Cómo lo genera el admin:** en `horarios.html`, con la edición desbloqueada, el botón **QR del local** muestra el QR (con el link debajo), permite **Imprimir** una hoja lista para pegar, y **Regenerar código** (invalida el QR impreso anterior; hay que reimprimirlo. Útil si alguien le toma foto y lo comparte fuera del local).
+- **Cómo lo genera el admin:** en `horarios.html`, con la edición desbloqueada, el menú **⋯ → QR del local** muestra el QR (con el link debajo), permite **Imprimir** una hoja lista para pegar, y **Regenerar código** (invalida el QR impreso anterior; hay que reimprimirlo. Útil si alguien le toma foto y lo comparte fuera del local).
 - **Backend:** `api/location.js` guarda el código en Redis (`horarios:location`) y exige la clave de edición incluso para leerlo (si fuera público, cualquiera armaría el link sin ir al local). `api/attendance.js` compara el código recibido con el guardado.
 - **Transición:** mientras el admin no haya generado el QR por primera vez (abrir el botón "QR del local" lo crea), el marcaje sigue funcionando como antes, sin exigir código.
 - **Qué NO resuelve:** el QR prueba que *alguien* estaba en el local, no *quién*. Un compañero presente aún podría escribir el nombre de otro que no llegó, y quien tenga el link (por ejemplo, una foto del QR) puede usarlo hasta que se regenere. La suplantación por nombre se cubre con el registro de celular por empleado (sección siguiente).
