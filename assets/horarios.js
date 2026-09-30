@@ -397,7 +397,7 @@ function renderReal(){
 }
 function updateHint(){
   $('#hint').textContent = mode==='ot'
-    ? `Horas extras de la semana del ${formatWeek(activeMonday())}: las horas trabajadas por encima de ${OT_LIMIT} h en la semana. Cada entrada y salida se aproxima a la media hora más cercana (en empate, a la menor). Toca un día para corregir sus marcajes.`
+    ? `Horas extras de la semana del ${formatWeek(activeMonday())}: las horas trabajadas por encima de ${OT_LIMIT} h en la semana. Las entradas se aproximan hacia arriba y las salidas hacia abajo, a la media hora, con unos minutos de gracia. Toca un día para corregir sus marcajes.`
     : mode==='real'
     ? `Horas reales de la semana del ${formatWeek(activeMonday())}, separadas por grupo. Solo lectura — los marcajes se registran desde "Marcar horario" (index.html). Un borde punteado indica un turno sin cerrar.`
     : editMode
@@ -676,10 +676,13 @@ ov.addEventListener('click',ev=>{ // tocar un bloque de Control de horario abre 
 
 /* ---- Horas extras (admin): horas trabajadas por encima del límite semanal ---- */
 const OT_LIMIT=42;  // jornada semanal (horas): lo que pase de aquí es hora extra
-const OT_STEP=30;   // los marcajes se aproximan al múltiplo de OT_STEP minutos más cercano
+const OT_STEP=30;   // los marcajes se aproximan a múltiplos de OT_STEP minutos (media hora)
+const OT_IN_DOWN=9; // ENTRADA: si pasaron OT_IN_DOWN min o menos desde la media hora, baja (9:38 → 9:30); si no, sube (9:44 → 10:00)
+const OT_OUT_UP=9;  // SALIDA: si faltan OT_OUT_UP min o menos para la siguiente media hora, sube (4:22 → 4:30); si no, baja (4:20 → 4:00). 0 = siempre baja
 const otOpen=new Set(); // empleados con el detalle abierto (se conserva al refrescar)
-// minutos del día -> múltiplo de OT_STEP más cercano; en empate (p. ej. 12:15) gana el menor
-function roundMin(m){const q=Math.floor(m/OT_STEP),r=m-q*OT_STEP;return r*2>OT_STEP?(q+1)*OT_STEP:q*OT_STEP}
+// minutos del día -> media hora. Las entradas tienden a subir (llegar tarde no se paga) y las salidas a bajar.
+function roundIn(m){const q=Math.floor(m/OT_STEP),r=m-q*OT_STEP;return r===0?m:(r<=OT_IN_DOWN?q*OT_STEP:(q+1)*OT_STEP)}
+function roundOut(m){const q=Math.floor(m/OT_STEP),r=m-q*OT_STEP;return r>0&&OT_STEP-r<=OT_OUT_UP?(q+1)*OT_STEP:q*OT_STEP}
 const hm=h=>{const t=Math.round(h*60),H=Math.floor(t/60),M=t%60;return M?(H?`${H} h ${M} min`:`${M} min`):`${H} h`};
 const hmin=m=>fmt(m/60);
 function computeOT(){
@@ -693,7 +696,7 @@ function computeOT(){
       const d=row.days[r.day],m=r.dt.getHours()*60+r.dt.getMinutes(); // se ignoran los segundos
       if(r.type==='entrada'){if(d.open===null)d.open=m;else d.flag='Hay dos entradas seguidas: revisa los marcajes.'}
       else if(d.open!==null){
-        const s=roundMin(d.open),e=roundMin(m);
+        const s=roundIn(d.open),e=roundOut(m);
         if(e>s){d.ivs.push({s,e});d.h+=(e-s)/60}
         d.open=null;
       }else d.flag='Hay una salida sin entrada: revisa los marcajes.';
@@ -711,7 +714,7 @@ function computeOT(){
 function renderOT(){
   const rows=computeOT(),mon=activeMonday();
   const totalX=rows.reduce((a,r)=>a+r.extra,0);
-  let html=`<div class="otsum"><b>Semana del ${formatWeek(mon)} · ${group==='cocina'?'Cocina':'Barra y servicio'}</b><span>Jornada: ${OT_LIMIT} h por semana · marcajes aproximados a ${OT_STEP} min</span><span class="otbig">${totalX?`Horas extras del grupo: ${hm(totalX)}`:'Sin horas extras esta semana'}</span></div>`;
+  let html=`<div class="otsum"><b>Semana del ${formatWeek(mon)} · ${group==='cocina'?'Cocina':'Barra y servicio'}</b><span>Jornada: ${OT_LIMIT} h por semana · marcajes aproximados a la media hora</span><span class="otbig">${totalX?`Horas extras del grupo: ${hm(totalX)}`:'Sin horas extras esta semana'}</span></div>`;
   html+=rows.map(r=>{
     const pct=Math.min(100,r.total/OT_LIMIT*100);
     const days=r.days.map((d,i)=>({d,i})).filter(({d})=>d.ivs.length||d.open!==null||d.flag);
@@ -721,7 +724,7 @@ function renderOT(){
     }).join(''):'<div class="otday" style="cursor:default;color:var(--mut)">Sin marcajes esta semana.</div>';
     return `<details class="otcard" data-emp="${escH(r.emp.id)}"${otOpen.has(r.emp.id)?' open':''}><summary><div class="othead"><span class="dot" style="background:${r.emp.c}"></span><b>${escH(r.emp.n)}</b><em>${hm(r.total)}</em><span class="otpill${r.extra?' otover':''}">${r.extra?'+'+hm(r.extra)+' extra':'Sin extras'}</span></div><div class="otbar"><i class="${r.extra?'otover':''}" style="width:${pct}%"></i></div></summary><div class="otdays">${body}</div></details>`;
   }).join('');
-  html+=`<p class="otnote">Cómo se calcula: cada turno es un par entrada → salida; cada hora se aproxima a la media hora más cercana (12:15 → 12:00, 12:16 → 12:30) y se suman las horas de la semana (lunes a domingo). Todo lo que pase de ${OT_LIMIT} h es hora extra, y se atribuye a los últimos días de la semana. Los turnos sin salida no se cuentan hasta corregirlos.</p>`;
+  html+=`<p class="otnote">Cómo se calcula: cada turno es un par entrada → salida. <b>Entrada:</b> si pasaron ${OT_IN_DOWN} min o menos de una media hora, baja a esa media hora (9:38 → 9:30); si pasó más, sube a la siguiente (9:44 → 10:00). <b>Salida:</b> ${OT_OUT_UP?`si faltan ${OT_OUT_UP} min o menos para la siguiente media hora, sube (4:22 → 4:30); si faltan más, baja (4:20 → 4:00)`:'siempre baja a la media hora anterior (4:29 → 4:00)'}. Se suman las horas de la semana (lunes a domingo); todo lo que pase de ${OT_LIMIT} h es hora extra y se atribuye a los últimos días. Los turnos sin salida no se cuentan hasta corregirlos.</p>`;
   $('#otView').innerHTML=html;
 }
 $('#otView').addEventListener('toggle',ev=>{const d=ev.target.closest('details.otcard');if(!d)return;d.open?otOpen.add(d.dataset.emp):otOpen.delete(d.dataset.emp)},true);

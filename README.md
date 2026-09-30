@@ -102,7 +102,9 @@ Si alguien marcó mal, olvidó marcar la salida o se equivocó de hora, el admin
 Tercera pestaña de la fila de modo (**Planeado / Control / Horas extras**). Calcula, por semana (lunes a domingo) y por grupo, las horas trabajadas de cada empleado a partir de los marcajes reales y cuántas superan la jornada semanal.
 
 - **Regla:** la jornada es de **42 h por semana** (`OT_LIMIT` en `assets/horarios.js`). Todo lo que pase de 42 es hora extra: 43 h trabajadas = 1 h extra. No hay límite diario.
-- **Redondeo:** cada entrada y cada salida se aproxima a la media hora más cercana (`OT_STEP` = 30 min), ignorando los segundos, y **en empate gana la hora menor**: 12:14 → 12:00, 12:15 → 12:00, 12:16 → 12:30, 12:45 → 12:30, 12:46 → 13:00.
+- **Redondeo a la media hora (se ignoran los segundos), distinto para entrada y salida** (constantes `OT_IN_DOWN` y `OT_OUT_UP` en `assets/horarios.js`):
+  - **Entrada (tiende a subir):** si pasaron 9 min o menos de una media hora, baja a ella (9:38 → 9:30, 9:39 → 9:30); si pasaron más, sube a la siguiente (9:40 → 10:00, 9:44 → 10:00). Es decir, 9 min de gracia hacia abajo y 21 hacia arriba.
+  - **Salida (tiende a bajar):** si faltan 9 min o menos para la siguiente media hora, sube (4:21 → 4:30, 4:22 → 4:30); si faltan más, baja (4:20 → 4:00, 4:19 → 4:00). Con `OT_OUT_UP = 0` la salida siempre baja (4:29 → 4:00).
 - **Cómo se suma:** cada par entrada → salida es un turno (un día puede tener turnos partidos); las pausas entre turnos no se cuentan, pero dentro de un turno no se descuenta nada. Las horas extras se atribuyen a los **últimos días** de la semana: se van acumulando de lunes a domingo y lo que pasa de 42 queda en el día en que se cruza el límite y en los siguientes.
 - **Qué muestra:** un resumen del grupo y una tarjeta por empleado (total, extras y una barra hacia las 42 h); al abrirla, el detalle por día con los turnos ya redondeados. Toca un día para abrir **Corregir marcajes** de ese empleado y ese día; al corregir, se recalcula.
 - **Avisos:** un turno sin salida **no se cuenta** hasta corregirlo (hoy aparece como "en curso"); dos entradas seguidas o una salida sin entrada también se marcan.
