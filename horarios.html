@@ -25,7 +25,7 @@
     </div>
   </div>
   <div class="top" id="modeRow" style="margin-top:6px;display:none">
-    <div class="grp" id="mode"><button data-m="plan" class="on">Planeado</button><button data-m="real">Control</button></div>
+    <div class="grp" id="mode"><button data-m="plan" class="on">Planeado</button><button data-m="real">Control</button><button data-m="ot">Horas extras</button></div>
     <div class="acts"><select class="clr" id="weekSel" style="display:none"></select><button class="clr ico" id="realRefresh" aria-label="Actualizar" title="Actualizar" style="display:none">↻</button></div>
   </div>
   <p class="hint" id="hint" hidden></p>
@@ -33,6 +33,7 @@
   <div id="msg"></div>
 </header>
 <div id="sc"><div id="grid"></div></div>
+<div id="otView" hidden></div>
 <dialog id="empd">
   <h2 id="empdTitle" style="margin:0 0 10px;font-size:15px">Empleados</h2>
   <div id="empList"></div>

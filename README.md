@@ -96,6 +96,18 @@ Si alguien marcó mal, olvidó marcar la salida o se equivocó de hora, el admin
 - **Trazabilidad:** los marcajes corregidos quedan con `edited` (fecha de la corrección) y los agregados a mano con `manual: true`; en la lista se ven como "Corregido" / "Agregado a mano".
 - **API:** `POST /api/attendance` con `{action:'edit'|'delete'|'add', ...}` y el header `x-edit-key` (mismo candado `1111`). No pasa por el QR del local ni por el celular registrado. No se aceptan horas de más de 45 días atrás (se podarían) ni de más de 36 h en el futuro. Tras cada cambio el arreglo se reordena por hora, para que el siguiente marcaje normal alterne bien entrada/salida.
 - **Límites:** solo se edita la hora dentro del mismo día del marcaje (para pasarlo a otro día, bórralo y agrégalo de nuevo) y no hay historial de valores anteriores.
+
+## Horas extras (solo admin)
+
+Tercera pestaña de la fila de modo (**Planeado / Control / Horas extras**). Calcula, por semana (lunes a domingo) y por grupo, las horas trabajadas de cada empleado a partir de los marcajes reales y cuántas superan la jornada semanal.
+
+- **Regla:** la jornada es de **42 h por semana** (`OT_LIMIT` en `assets/horarios.js`). Todo lo que pase de 42 es hora extra: 43 h trabajadas = 1 h extra. No hay límite diario.
+- **Redondeo:** cada entrada y cada salida se aproxima a la media hora más cercana (`OT_STEP` = 30 min), ignorando los segundos, y **en empate gana la hora menor**: 12:14 → 12:00, 12:15 → 12:00, 12:16 → 12:30, 12:45 → 12:30, 12:46 → 13:00.
+- **Cómo se suma:** cada par entrada → salida es un turno (un día puede tener turnos partidos); las pausas entre turnos no se cuentan, pero dentro de un turno no se descuenta nada. Las horas extras se atribuyen a los **últimos días** de la semana: se van acumulando de lunes a domingo y lo que pasa de 42 queda en el día en que se cruza el límite y en los siguientes.
+- **Qué muestra:** un resumen del grupo y una tarjeta por empleado (total, extras y una barra hacia las 42 h); al abrirla, el detalle por día con los turnos ya redondeados. Toca un día para abrir **Corregir marcajes** de ese empleado y ese día; al corregir, se recalcula.
+- **Avisos:** un turno sin salida **no se cuenta** hasta corregirlo (hoy aparece como "en curso"); dos entradas seguidas o una salida sin entrada también se marcan.
+- **Selector de semana** y **↻** funcionan igual que en Control; los marcajes se conservan 45 días, así que solo hay extras de las últimas ~6 semanas.
+- **Pendiente (siguiente etapa):** comparar contra el **horario planeado**. Hoy el plan es una sola plantilla semanal sin fecha; para compararlo con semanas pasadas hay que guardar el plan de cada semana. Tampoco hay recargos (nocturnos, dominicales, festivos) ni turnos que crucen la medianoche.
 ## Celular registrado por empleado (anti-suplantación)
 
 Para que un compañero no pueda marcar con el nombre de otro, cada empleado registra **su celular** una sola vez:

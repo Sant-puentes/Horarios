@@ -271,7 +271,7 @@ function setGroup(g){
   applyGroupLayout(g);
   buildPalette();
   document.querySelectorAll('#grp button').forEach(b=>b.classList.toggle('on',b.dataset.g===g));
-  if(mode==='real')renderReal();else{render();renderRests()}
+  if(mode==='real')renderReal();else if(mode==='ot')renderOT();else{render();renderRests()}
   zoom();
 }
 
@@ -368,6 +368,7 @@ async function loadReal(){
   computeReal();
   packLanesFor('cocina');packLanesFor('barra');
   if(mode==='real'){renderReal();updateHint()}
+  else if(mode==='ot'){renderOT();updateHint()}
 }
 function renderReal(){
   const list=REAL[group]||[];
@@ -395,7 +396,9 @@ function renderReal(){
   });
 }
 function updateHint(){
-  $('#hint').textContent = mode==='real'
+  $('#hint').textContent = mode==='ot'
+    ? `Horas extras de la semana del ${formatWeek(activeMonday())}: las horas trabajadas por encima de ${OT_LIMIT} h en la semana. Cada entrada y salida se aproxima a la media hora más cercana (en empate, a la menor). Toca un día para corregir sus marcajes.`
+    : mode==='real'
     ? `Horas reales de la semana del ${formatWeek(activeMonday())}, separadas por grupo. Solo lectura — los marcajes se registran desde "Marcar horario" (index.html). Un borde punteado indica un turno sin cerrar.`
     : editMode
       ? 'Arrastra un empleado a un día. Estira los bordes del bloque para cambiar sus horas. Para un turno partido, suelta al mismo empleado otra vez en ese día. Suelta sobre "Descanso" (arriba de cada día) para marcar que ese empleado libra ese día.'
@@ -403,29 +406,34 @@ function updateHint(){
 }
 function setMode(m){
   mode=m;
+  const att=m!=='plan'; // Control y Horas extras son solo lectura sobre los marcajes
   document.querySelectorAll('#mode button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
-  document.body.classList.toggle('attmode',m==='real');
-  $('#realRefresh').style.display=m==='real'?'':'none';
-  $('#weekSel').style.display=m==='real'?'':'none';
-  $('#attBtn').hidden=m!=='real';
+  document.body.classList.toggle('attmode',att);
+  $('#realRefresh').style.display=att?'':'none';
+  $('#weekSel').style.display=att?'':'none';
+  $('#attBtn').hidden=!att;
+  sc.hidden=m==='ot';$('#otView').hidden=m!=='ot';
   updateHint();
-  if(m==='real'){
-    nodes.forEach(n=>n.remove());nodes.clear();
-    loadReal();
-  }else{
+  if(m==='plan'){
     realNodes.forEach(n=>n.remove());realNodes.clear();
     render();renderRests();
+  }else{
+    nodes.forEach(n=>n.remove());nodes.clear();
+    if(m==='ot'){realNodes.forEach(n=>n.remove());realNodes.clear()}
+    loadReal();
   }
 }
 $('#mode').addEventListener('click',ev=>{
   const b=ev.target.closest('button');if(!b||!editMode||b.dataset.m===mode)return;
   setMode(b.dataset.m);
 });
-$('#realRefresh').onclick=()=>{if(mode==='real')loadReal()};
+$('#realRefresh').onclick=()=>{if(mode!=='plan')loadReal()};
 $('#weekSel').addEventListener('change',()=>{
   const v=$('#weekSel').value;
   selWeek=v==='auto'?null:new Date(+v);
-  computeReal();packLanesFor('cocina');packLanesFor('barra');renderReal();updateHint();
+  computeReal();packLanesFor('cocina');packLanesFor('barra');
+  if(mode==='ot')renderOT();else renderReal();
+  updateHint();
 });
 $('#grp').addEventListener('click',ev=>{
   const b=ev.target.closest('button');if(!b||b.dataset.g===group)return;
@@ -584,7 +592,7 @@ async function attFetch(body){
 }
 function attApply(records){ // el servidor devuelve todos los marcajes ya corregidos y ordenados
   ATT=records;buildWeekOptions();computeReal();packLanesFor('cocina');packLanesFor('barra');
-  if(mode==='real')renderReal();
+  if(mode==='real')renderReal();else if(mode==='ot')renderOT();
   attRender();
 }
 function attRecords(){
@@ -665,6 +673,63 @@ ov.addEventListener('click',ev=>{ // tocar un bloque de Control de horario abre 
   const iv=(REAL[group]||[]).find(x=>x.id===hit[0]);if(iv)attOpen({emp:iv.emp,day:iv.day});
 });
 
+
+/* ---- Horas extras (admin): horas trabajadas por encima del límite semanal ---- */
+const OT_LIMIT=42;  // jornada semanal (horas): lo que pase de aquí es hora extra
+const OT_STEP=30;   // los marcajes se aproximan al múltiplo de OT_STEP minutos más cercano
+const otOpen=new Set(); // empleados con el detalle abierto (se conserva al refrescar)
+// minutos del día -> múltiplo de OT_STEP más cercano; en empate (p. ej. 12:15) gana el menor
+function roundMin(m){const q=Math.floor(m/OT_STEP),r=m-q*OT_STEP;return r*2>OT_STEP?(q+1)*OT_STEP:q*OT_STEP}
+const hm=h=>{const t=Math.round(h*60),H=Math.floor(t/60),M=t%60;return M?(H?`${H} h ${M} min`:`${M} min`):`${H} h`};
+const hmin=m=>fmt(m/60);
+function computeOT(){
+  const mon=activeMonday(),now=new Date(),todayIdx=dayIndexOf(now,mon);
+  const rows=EMP.map(e=>({emp:e,days:Array.from({length:7},()=>({ivs:[],open:null,h:0,x:0,flag:''})),total:0,extra:0}));
+  const byId=new Map(rows.map(r=>[r.emp.id,r]));
+  ATT.filter(r=>r.group===group).map(r=>({...r,dt:new Date(r.ts)})).filter(r=>!isNaN(r.dt))
+    .map(r=>({...r,day:dayIndexOf(r.dt,mon)})).filter(r=>r.day!==null).sort((a,b)=>a.dt-b.dt)
+    .forEach(r=>{
+      const row=byId.get(r.empId);if(!row)return;
+      const d=row.days[r.day],m=r.dt.getHours()*60+r.dt.getMinutes(); // se ignoran los segundos
+      if(r.type==='entrada'){if(d.open===null)d.open=m;else d.flag='Hay dos entradas seguidas: revisa los marcajes.'}
+      else if(d.open!==null){
+        const s=roundMin(d.open),e=roundMin(m);
+        if(e>s){d.ivs.push({s,e});d.h+=(e-s)/60}
+        d.open=null;
+      }else d.flag='Hay una salida sin entrada: revisa los marcajes.';
+    });
+  rows.forEach(row=>{
+    let cum=0;
+    row.days.forEach((d,i)=>{
+      if(d.open!==null&&!d.flag)d.flag=(i===todayIdx)?'Turno en curso: se cuenta cuando marque la salida.':'Falta la salida: no se cuentan esas horas hasta corregirlo.';
+      d.x=Math.max(0,d.h-Math.max(0,OT_LIMIT-cum));cum+=d.h;
+    });
+    row.total=cum;row.extra=row.days.reduce((a,d)=>a+d.x,0);
+  });
+  return rows;
+}
+function renderOT(){
+  const rows=computeOT(),mon=activeMonday();
+  const totalX=rows.reduce((a,r)=>a+r.extra,0);
+  let html=`<div class="otsum"><b>Semana del ${formatWeek(mon)} · ${group==='cocina'?'Cocina':'Barra y servicio'}</b><span>Jornada: ${OT_LIMIT} h por semana · marcajes aproximados a ${OT_STEP} min</span><span class="otbig">${totalX?`Horas extras del grupo: ${hm(totalX)}`:'Sin horas extras esta semana'}</span></div>`;
+  html+=rows.map(r=>{
+    const pct=Math.min(100,r.total/OT_LIMIT*100);
+    const days=r.days.map((d,i)=>({d,i})).filter(({d})=>d.ivs.length||d.open!==null||d.flag);
+    const body=days.length?days.map(({d,i})=>{
+      const iv=d.ivs.map(v=>`${hmin(v.s)} – ${hmin(v.e)}`).join(' y ');
+      return `<div class="otday" data-emp="${escH(r.emp.id)}" data-day="${i}"><span class="d">${dayLabel(mon,i)}</span><span class="iv">${iv||'—'}</span><span class="h">${hm(d.h)}</span>${d.x?`<span class="xx">+${hm(d.x)} extra</span>`:''}${d.flag?`<span class="fl">⚠ ${d.flag}</span>`:''}</div>`;
+    }).join(''):'<div class="otday" style="cursor:default;color:var(--mut)">Sin marcajes esta semana.</div>';
+    return `<details class="otcard" data-emp="${escH(r.emp.id)}"${otOpen.has(r.emp.id)?' open':''}><summary><div class="othead"><span class="dot" style="background:${r.emp.c}"></span><b>${escH(r.emp.n)}</b><em>${hm(r.total)}</em><span class="otpill${r.extra?' otover':''}">${r.extra?'+'+hm(r.extra)+' extra':'Sin extras'}</span></div><div class="otbar"><i class="${r.extra?'otover':''}" style="width:${pct}%"></i></div></summary><div class="otdays">${body}</div></details>`;
+  }).join('');
+  html+=`<p class="otnote">Cómo se calcula: cada turno es un par entrada → salida; cada hora se aproxima a la media hora más cercana (12:15 → 12:00, 12:16 → 12:30) y se suman las horas de la semana (lunes a domingo). Todo lo que pase de ${OT_LIMIT} h es hora extra, y se atribuye a los últimos días de la semana. Los turnos sin salida no se cuentan hasta corregirlos.</p>`;
+  $('#otView').innerHTML=html;
+}
+$('#otView').addEventListener('toggle',ev=>{const d=ev.target.closest('details.otcard');if(!d)return;d.open?otOpen.add(d.dataset.emp):otOpen.delete(d.dataset.emp)},true);
+$('#otView').addEventListener('click',ev=>{
+  const row=ev.target.closest('.otday[data-day]');if(!row||!editMode||mode!=='ot')return;
+  attOpen({emp:row.dataset.emp,day:+row.dataset.day});
+});
+
 /* candado de edición */
 function applyEditMode(){
   document.body.classList.toggle('editing',editMode);
@@ -672,7 +737,7 @@ function applyEditMode(){
   $('#editBtn').textContent=editMode?'Bloquear':'Editar';
   closeMenu();
   $('#modeRow').style.display=editMode?'':'none';
-  if(!editMode&&mode==='real')setMode('plan'); // el control de horario es solo para admin
+  if(!editMode&&mode!=='plan')setMode('plan'); // Control de horario y Horas extras son solo para admin
   updateHint();
   flushRepair();
   document.querySelectorAll('.chip[data-id]').forEach(c=>c.classList.toggle('sel',!editMode&&c.dataset.id===filterEmp));
@@ -846,5 +911,5 @@ sc.addEventListener('wheel',e=>{ // pellizco del trackpad / Ctrl+rueda en comput
   zoomAt(curDayW()*Math.exp(-e.deltaY*0.006),e.clientX);
 },{passive:false});
 addEventListener('resize',()=>zoom());
-addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){pull();if(mode==='real')loadReal()}});
+addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){pull();if(mode!=='plan')loadReal()}});
 buildPalette();render();renderRests();zoom(0);pull();
